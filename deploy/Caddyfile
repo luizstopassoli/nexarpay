@@ -1,0 +1,25 @@
+{
+	# timeouts e limite de cabeçalho: mitigam conexões lentas (slowloris) e cabeçalhos gigantes
+	servers {
+		timeouts {
+			read_header 10s
+			read_body 120s
+			write 120s
+			idle 2m
+		}
+		max_header_size 16KB
+	}
+}
+
+{$DEMO_DOMINIO} {
+	encode gzip
+	# Portão extra: usuário/senha pedidos ANTES de qualquer tela do sistema (a demo não fica aberta na internet).
+	# Gere o hash com:  docker run --rm caddy:2 caddy hash-password --plaintext 'SENHA'
+	basic_auth {
+		{$DEMO_ACESSO_USER} {$DEMO_ACESSO_HASH}
+	}
+	request_body {
+		max_size 30MB
+	}
+	reverse_proxy app:8765
+}

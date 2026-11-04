@@ -1,0 +1,16 @@
+{
+  "porta": 8765,
+  "dominio_permitido": "grupogpac.com.br",
+  "url_base": "http://192.168.0.10:8765",
+  "reenvio_retorna_para_aprovacao1": true,
+  "email": {
+    "modo": "smtp",
+    "host": "smtp.gmail.com",
+    "porta": 465,
+    "ssl": true,
+    "usuario": "gpacpay@grupogpac.com.br",
+    "senha": "xxxx xxxx xxxx xxxx",
+    "remetente": "NexarPay <gpacpay@grupogpac.com.br>",
+    "copia_para": []
+  }
+}

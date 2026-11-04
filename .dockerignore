@@ -1,0 +1,9 @@
+data
+config.json
+seed
+legado
+deploy
+backup*
+*.sqlite*
+.git
+__pycache__

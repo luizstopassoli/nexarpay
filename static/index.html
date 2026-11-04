@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>NexarPay | Tudo Sob Controle.</title>
+<meta name="description" content="NexarPay — solicitação e aprovação de pagamentos, orçamento por departamento e lançamentos — Grupo Gpac"/>
+<link rel="icon" type="image/x-icon" href="/static/assets/favicon.ico"/>
+<link rel="stylesheet" href="/static/css/app.css"/>
+<script src="/static/js/chart.umd.min.js"></script>
+</head>
+<body>
+
+<div id="bootScreen" style="position:fixed;inset:0;z-index:999;background:#0a0a0f;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;transition:opacity .35s ease;">
+  <img src="/static/assets/favicon.png" alt="" style="width:52px;height:52px;object-fit:contain;filter:drop-shadow(0 0 24px rgba(0,64,244,.45));"/>
+  <div style="color:#a6a6b5;font-family:'Inter',sans-serif;font-size:12.5px;font-weight:600;letter-spacing:.03em;">Carregando NexarPay…</div>
+</div>
+
+<!-- ===================== LOGIN ===================== -->
+<div id="loginScreen" class="login-screen" style="display:none;">
+  <img class="login-bg-img" src="/static/assets/login-bg.jpg" alt="" aria-hidden="true"/>
+  <div class="login-bg-overlay" aria-hidden="true"></div>
+  <div class="login-card anim-in">
+    <div class="login-topbar"></div>
+    <div class="login-card-body">
+      <div class="login-brand">
+        <img class="login-logo-main" src="/static/assets/logo-login.png" alt="NexarPay — Tudo Sob Controle."/>
+      </div>
+
+      <!-- passo 1: login -->
+      <form id="loginForm" class="login-form">
+        <div class="login-title">Login</div>
+        <div class="login-input-wrap">
+          <span class="login-input-ico" id="icoLoginUser"></span>
+          <input class="login-input" type="email" name="email" placeholder="E-mail corporativo" autocomplete="username" required/>
+        </div>
+        <div class="login-input-wrap">
+          <span class="login-input-ico" id="icoLoginLock"></span>
+          <input class="login-input" type="password" name="senha" placeholder="Senha" autocomplete="current-password" required/>
+        </div>
+        <div class="login-error" id="loginError" style="display:none;"></div>
+        <button type="submit" class="btn login-submit" id="loginSubmit">Login</button>
+        <button type="button" class="login-link" id="forgotLink">Esqueci minha senha</button>
+      </form>
+
+      <!-- passo 2: esqueci minha senha -->
+      <form id="forgotForm" class="login-form" style="display:none;">
+        <div class="login-title">Recuperar senha</div>
+        <p class="login-help">Informe o e-mail cadastrado. Enviaremos um <strong>link para criar uma nova senha</strong> (vale por 30 minutos).</p>
+        <div class="login-input-wrap">
+          <span class="login-input-ico" id="icoForgotUser"></span>
+          <input class="login-input" type="email" name="email" placeholder="E-mail corporativo" autocomplete="username" required/>
+        </div>
+        <div class="login-error" id="forgotError" style="display:none;"></div>
+        <div class="login-ok" id="forgotOk" style="display:none;"></div>
+        <button type="submit" class="btn login-submit" id="forgotSubmit">Enviar</button>
+        <button type="button" class="login-link" id="backToLogin">Voltar ao login</button>
+      </form>
+
+      <!-- passo 3: troca obrigatória de senha (senha provisória) -->
+      <!-- passo: código da verificação em duas etapas -->
+      <form id="mfaForm" class="login-form" style="display:none;">
+        <div class="login-title">Verificação em duas etapas</div>
+        <p class="login-help">Digite o código de 6 dígitos do seu aplicativo autenticador (ou um código de recuperação).</p>
+        <div class="login-input-wrap">
+          <span class="login-input-ico" id="icoMfa"></span>
+          <input class="login-input" type="text" name="codigo" placeholder="Código" inputmode="numeric" autocomplete="one-time-code" maxlength="20" required/>
+        </div>
+        <div class="login-error" id="mfaError" style="display:none;"></div>
+        <button type="submit" class="btn login-submit">Verificar</button>
+        <button type="button" class="login-link" id="mfaBack">Voltar ao login</button>
+      </form>
+
+      <!-- passo: cadastro obrigatório do 2º fator -->
+      <form id="mfaSetupForm" class="login-form" style="display:none;" onsubmit="return false;">
+        <div class="login-title">Ative a verificação em duas etapas</div>
+        <div id="mfaSetupBody"></div>
+      </form>
+
+      <!-- passo: nova senha pelo link do e-mail -->
+      <form id="resetForm" class="login-form" style="display:none;">
+        <div class="login-title">Crie sua nova senha</div>
+        <p class="login-help">Defina a nova senha (mínimo 10 caracteres, com letras e números).</p>
+        <div class="login-input-wrap">
+          <span class="login-input-ico" id="icoRs1"></span>
+          <input class="login-input" type="password" name="nova" placeholder="Nova senha" autocomplete="new-password" minlength="10" required/>
+        </div>
+        <div class="login-input-wrap">
+          <span class="login-input-ico" id="icoRs2"></span>
+          <input class="login-input" type="password" name="confirma" placeholder="Confirmar nova senha" autocomplete="new-password" minlength="10" required/>
+        </div>
+        <div class="login-error" id="resetError" style="display:none;"></div>
+        <button type="submit" class="btn login-submit">Salvar nova senha</button>
+        <button type="button" class="login-link" id="resetBack">Ir para o login</button>
+      </form>
+
+      <form id="changePassForm" class="login-form" style="display:none;">
+        <div class="login-title">Crie sua nova senha</div>
+        <p class="login-help">Você entrou com uma <strong>senha provisória</strong>. Por segurança, defina agora uma nova senha (mínimo 10 caracteres, com letras e números).</p>
+        <div class="login-input-wrap">
+          <span class="login-input-ico" id="icoCp1"></span>
+          <input class="login-input" type="password" name="nova" placeholder="Nova senha" autocomplete="new-password" minlength="10" required/>
+        </div>
+        <div class="login-input-wrap">
+          <span class="login-input-ico" id="icoCp2"></span>
+          <input class="login-input" type="password" name="confirma" placeholder="Confirmar nova senha" autocomplete="new-password" minlength="10" required/>
+        </div>
+        <div class="login-error" id="changePassError" style="display:none;"></div>
+        <button type="submit" class="btn login-submit">Salvar e entrar</button>
+      </form>
+    </div>
+  </div>
+  <div class="login-credit">Criado e Desenvolvido por Luiz Stopassoli</div>
+</div>
+
+<!-- ===================== APP ===================== -->
+<div class="app-shell" id="appShell" style="display:none;">
+  <aside class="sidebar">
+    <div class="brand brand-nexarpay">
+      <img class="brand-logo-img logo-dark" src="/static/assets/logo-dark.png" alt="NexarPay"/>
+      <img class="brand-logo-img logo-light" src="/static/assets/logo-light.png" alt="NexarPay"/>
+    </div>
+
+    <div class="nav-group-label">Navegação</div>
+    <div id="navList"></div>
+
+    <div class="sidebar-foot">
+      <div class="user-card" id="userCard"></div>
+      <div class="theme-toggle" style="margin-top:2px;">
+        <button id="themeBtnDark"><span id="icoMoon"></span>Escuro</button>
+        <button id="themeBtnLight"><span id="icoSun"></span>Claro</button>
+      </div>
+      <button class="btn btn-sm" id="changeMyPassBtn" style="justify-content:flex-start;"><span id="icoKey"></span>Trocar minha senha</button>
+      <button class="btn btn-sm" id="mfaBtn" style="justify-content:flex-start;"><span id="icoMfaBtn"></span>Verificação em 2 etapas</button>
+      <button class="btn btn-sm" id="sessionsBtn" style="justify-content:flex-start;"><span id="icoSessionsBtn"></span>Minhas sessões</button>
+      <button class="btn btn-sm" id="logoutBtn" style="justify-content:flex-start;"><span id="icoLogout"></span>Sair</button>
+      <div class="mini-hint">NexarPay v2.0 · dados no servidor da empresa</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <h1 id="pageTitle">Dashboard</h1>
+        <div class="subtitle" id="pageSubtitle"></div>
+      </div>
+      <div class="topbar-right" id="topbarRight"></div>
+    </div>
+
+    <section class="page" id="page-dashboard"></section>
+    <section class="page page-hidden" id="page-gerencial"></section>
+    <section class="page page-hidden" id="page-dashboard_tv"></section>
+    <section class="page page-hidden" id="page-solicitacoes"></section>
+    <section class="page page-hidden" id="page-lancamentos"></section>
+    <section class="page page-hidden" id="page-orcamento"></section>
+    <section class="page page-hidden" id="page-relatorios"></section>
+    <section class="page page-hidden" id="page-propriedades"></section>
+    <section class="page page-hidden" id="page-configuracoes"></section>
+  </main>
+</div>
+
+<div class="modal-backdrop" id="modalBackdrop"></div>
+<div class="toast-stack" id="toastStack"></div>
+
+<script src="/static/js/core.js"></script>
+<script src="/static/js/auth.js"></script>
+<script src="/static/js/dashboard.js"></script>
+<script src="/static/js/solicitacoes.js"></script>
+<script src="/static/js/lancamentos.js"></script>
+<script src="/static/js/orcamento.js"></script>
+<script src="/static/js/propriedades.js"></script>
+<script src="/static/js/configuracoes.js"></script>
+<script src="/static/js/relatorios.js"></script>
+<script src="/static/js/app.js"></script>
+</body>
+</html>

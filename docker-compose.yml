@@ -1,0 +1,60 @@
+# NexarPay — PRODUÇÃO (HTTPS automático com Caddy + Let's Encrypt). Sem modo demo.
+# Uso:  cp deploy/prod.env.example .env   (edite)   &&   docker compose up -d --build
+# Para a demonstração com dados fictícios use:  docker compose -f docker-compose.demo.yml ...
+name: nexarpay
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      NEXARPAY_HTTPS: "1"
+      NEXARPAY_TRUST_PROXY: "1"
+      NEXARPAY_ADMIN_EMAIL: "${APP_ADMIN_EMAIL:?defina APP_ADMIN_EMAIL no .env (e-mail do primeiro administrador)}"
+      NEXARPAY_ADMIN_NOME: "${APP_ADMIN_NOME:-Administrador}"
+      NEXARPAY_CLAMAV_HOST: "${CLAMAV_HOST:-}"   # defina CLAMAV_HOST=clamav e suba com --profile av para ativar o antivírus
+      NEXARPAY_AV_OBRIGATORIO: "${AV_OBRIGATORIO:-0}"
+      NEXARPAY_SECRET_KEY: "${APP_SECRET_KEY:?defina APP_SECRET_KEY no .env (32+ caracteres aleatórios; guarde cópia fora do servidor)}"
+      NEXARPAY_URL_BASE: "https://${APP_DOMINIO:?defina APP_DOMINIO no .env}"
+      NEXARPAY_DOMINIO: "${APP_EMAIL_DOMINIO:?defina APP_EMAIL_DOMINIO no .env (domínio dos e-mails dos usuários)}"
+    volumes:
+      - nexarpay-data:/app/data
+      # config.json (SMTP) montado somente leitura; fica fora da imagem e do Git
+      - ./config.json:/app/config.json:ro
+    # sem "ports": o app só é alcançável pelo Caddy, dentro da rede do compose
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    mem_limit: 512m
+    pids_limit: 200
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "5" } }
+
+  # Antivírus opcional (ClamAV, ~1 GB de RAM):  docker compose --profile av up -d   com CLAMAV_HOST=clamav no .env
+  clamav:
+    image: clamav/clamav:1.4
+    profiles: ["av"]
+    restart: unless-stopped
+    volumes:
+      - clamav-db:/var/lib/clamav
+    mem_limit: 2g
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      APP_DOMINIO: "${APP_DOMINIO}"
+    volumes:
+      - ./deploy/Caddyfile.prod:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [app]
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "5" } }
+
+volumes:
+  clamav-db:
+  nexarpay-data:
+  caddy-data:
+  caddy-config:

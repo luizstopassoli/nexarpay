@@ -1,0 +1,11 @@
+# NUNCA enviar ao GitHub
+.env
+config.json
+data/
+seed/dados-iniciais-completos.json
+*.sqlite*
+backup*/
+__pycache__/
+.DS_Store
+seed/
+legado/

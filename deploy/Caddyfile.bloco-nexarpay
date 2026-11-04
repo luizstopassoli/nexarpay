@@ -1,0 +1,11 @@
+# Bloco para ACRESCENTAR ao FINAL do Caddyfile do Nexarium (o que já escuta 80/443).
+# Reaproveita o mesmo portão (snippet "gate", definido em gate.caddy): mesmo usuário/senha do Nexarium.
+# Troque nexarpay.SEUDOMINIO.com.br pelo endereço real.
+nexarpay.SEUDOMINIO.com.br {
+	encode gzip
+	import gate
+	request_body {
+		max_size 30MB
+	}
+	reverse_proxy nexarpay-app:8765
+}

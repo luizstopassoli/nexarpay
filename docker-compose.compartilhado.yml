@@ -1,0 +1,35 @@
+# NexarPay — DEMO no MESMO servidor de outro sistema que já usa as portas 80/443 (ex.: Nexarium).
+# Não sobe Caddy próprio: o Caddy do outro sistema recebe o tráfego e repassa para "nexarpay-app:8765".
+# Pré-requisito: descobrir o nome da rede do outro sistema:  docker network ls   (ex.: nexarium_default)
+#   e definir REDE_PROXY no .env (padrão abaixo: nexarium_default).
+# Uso:  cp deploy/demo.env.example .env  (edite)  &&  docker compose -f docker-compose.compartilhado.yml up -d --build
+name: nexarpay-demo
+
+services:
+  app:
+    build: .
+    container_name: nexarpay-app          # nome único na rede compartilhada (o Caddy usa este nome)
+    restart: unless-stopped
+    environment:
+      NEXARPAY_DEMO: "1"
+      NEXARPAY_HTTPS: "1"
+      NEXARPAY_TRUST_PROXY: "1"
+      NEXARPAY_DEMO_SENHA: "${DEMO_SENHA:?defina DEMO_SENHA no .env (10+ caracteres, letras e números)}"
+      NEXARPAY_URL_BASE: "https://${DEMO_DOMINIO:?defina DEMO_DOMINIO no .env}"
+      NEXARPAY_DOMINIO: "${DEMO_EMAIL_DOMINIO:-demo.example.com}"
+    volumes:
+      - nexarpay-data:/app/data
+    networks: [proxy]
+    # sem "ports": só o Caddy do outro sistema alcança o app
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+
+networks:
+  proxy:
+    external: true
+    name: "${REDE_PROXY:-nexarium_default}"
+
+volumes:
+  nexarpay-data:

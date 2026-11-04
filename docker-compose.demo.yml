@@ -1,0 +1,42 @@
+# NexarPay — ambiente de DEMONSTRAÇÃO com HTTPS automático (Caddy + Let's Encrypt)
+# SOMENTE DEMO (dados fictícios). Para produção use docker-compose.yml.
+# Uso:  cp deploy/demo.env.example .env   (edite)   &&   docker compose -f docker-compose.demo.yml up -d --build
+name: nexarpay-demo   # projeto/volumes separados da produção (o reset da demo nunca toca os dados reais)
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      NEXARPAY_DEMO: "1"
+      NEXARPAY_HTTPS: "1"
+      NEXARPAY_TRUST_PROXY: "1"
+      NEXARPAY_DEMO_SENHA: "${DEMO_SENHA:?defina DEMO_SENHA no .env (10+ caracteres, letras e números)}"
+      NEXARPAY_URL_BASE: "https://${DEMO_DOMINIO:?defina DEMO_DOMINIO no .env}"
+      NEXARPAY_DOMINIO: "${DEMO_EMAIL_DOMINIO:-demo.example.com}"
+    volumes:
+      - nexarpay-data:/app/data
+    # sem "ports": o app só é alcançável pelo Caddy, dentro da rede do compose
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      DEMO_DOMINIO: "${DEMO_DOMINIO}"
+      DEMO_ACESSO_USER: "${DEMO_ACESSO_USER:-demo}"
+      DEMO_ACESSO_HASH: "${DEMO_ACESSO_HASH:?defina DEMO_ACESSO_HASH no .env (veja deploy/demo.env.example)}"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [app]
+
+volumes:
+  nexarpay-data:
+  caddy-data:
+  caddy-config:
