@@ -146,11 +146,11 @@ function openTipoSolicitacao() {
     <div class="modal-body">
       <p style="font-size:13px; color:var(--text-dim); margin-bottom:14px;">A solicitação é para pagamento de:</p>
       <div class="type-grid">
-        <div class="type-card" data-tipo="fornecedor">${icon('truck')}<strong>CLIENTE/FORNECEDOR</strong><span>Pagamento a um fornecedor ou reembolso a um cliente, vinculado a uma OC/PI.</span></div>
+        ${DB.user && DB.user.perfil === 'rh' ? '' : `<div class="type-card" data-tipo="fornecedor">${icon('truck')}<strong>CLIENTE/FORNECEDOR</strong><span>Pagamento a um fornecedor ou reembolso a um cliente, vinculado a uma OC/PI.</span></div>`}
         <div class="type-card" data-tipo="reembolso">${icon('repeat')}<strong>REEMBOLSO</strong><span>Despesa paga por você (alimentação, transporte, hospedagem…) com recibo ou nota fiscal.</span></div>
-        <div class="type-card" data-tipo="freelancer">${icon('users')}<strong>FREELANCER</strong><span>Contratação de profissional autônomo (até 31 dias), com a etapa de aprovação do RH 1.</span></div>
-        ${podeSolicitarRescisao() ? `<div class="type-card" data-tipo="rescisao">${icon('userX')}<strong>RESCISÕES</strong><span>Custos de desligamento de colaboradores (aviso prévio, férias, FGTS…), com a aprovação do RH 1.</span></div>` : ''}
-        <div class="type-card" data-tipo="grupo">${icon('building')}<strong>GRUPO GPAC</strong><span>Despesa interna de uma das empresas do grupo, dentro do orçamento do departamento.</span></div>
+        <div class="type-card" data-tipo="freelancer">${icon('users')}<strong>FREELANCER</strong><span>Contratação de profissional autônomo por períodos pré-determinados.</span></div>
+        ${podeSolicitarRescisao() ? `<div class="type-card" data-tipo="rescisao">${icon('userX')}<strong>RESCISÕES</strong><span>Custos de desligamento de colaboradores (aviso prévio, férias, FGTS…).</span></div>` : ''}
+        <div class="type-card" data-tipo="grupo">${icon('building')}<strong>INTERNO</strong><span>Despesa interna da empresa ou Grupo, dentro do orçamento do departamento.</span></div>
       </div>
     </div>`, { size: 'lg' });
   modalBackdrop().querySelectorAll('.type-card').forEach(c => c.addEventListener('click', () => { if (c.dataset.tipo === 'freelancer' && (DB.travaFreelancer || {}).bloqueado) { toast(DB.travaFreelancer.mensagem, 'error'); return; } closeModal(); setTimeout(() => openSolicitacaoForm(c.dataset.tipo), 200); }));
@@ -241,7 +241,7 @@ function openSolicitacaoForm(tipo, existente) {
       <div class="form-field"><label>CNPJ <span class="req">*</span></label><input class="input" name="cpfCnpj" required placeholder="00.000.000/0000-00" value="${escapeHtml(d.cpfCnpj || '')}"/></div>
       ${editing ? '' : fAnexos('Anexar NF (pode ser anexada depois, até o fim da contratação)', false)}`;
   } else {
-    titulo = 'Pagamento — Grupo Gpac';
+    titulo = 'Pagamento — Interno';
     campos = `<div class="form-field full"><label>Título <span class="req">*</span></label><input class="input" name="titulo" required placeholder="Ex.: Pagamento ao Fornecedor XYZ" value="${escapeHtml(d.titulo || '')}"/></div>
       ${fSolicitante}${fEmail}${fDep}
       <div class="form-field"><label>Fornecedor <span class="req">*</span></label><input class="input" name="fornecedor" required placeholder="Quem irá receber o pagamento" value="${escapeHtml(d.fornecedor || '')}"/></div>

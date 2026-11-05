@@ -646,7 +646,7 @@ body:not(.perfil-admin) .scenario-radio{ pointer-events:none; cursor:default; op
 .sol-hero{ display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:18px; }
 .sol-hero h2{ font-size:18px; font-weight:800; font-family:var(--font-display); }
 .sol-hero .hint{ margin-top:3px; }
-.btn-cta{ background:var(--brand-grad); color:#fff; text-shadow:0 1px 2px rgba(0,16,60,.35); border:none; font-weight:800; letter-spacing:.02em; padding:10px 18px; box-shadow:var(--glow-brand); }
+.btn-cta{ background:linear-gradient(135deg, var(--brand-navy), var(--brand-green)); color:#fff; text-shadow:0 1px 2px rgba(0,16,60,.35); border:none; font-weight:800; letter-spacing:.02em; padding:10px 18px; box-shadow:var(--glow-brand); }
 .btn-cta:hover{ background: color-mix(in srgb, var(--brand-green-soft) 14%, transparent); border:1px solid var(--brand-green-soft); color: var(--brand-green-soft); text-shadow:none; box-shadow:none; }
 .alert-box{ display:flex; gap:12px; align-items:flex-start; padding:12px 14px; border-radius:var(--radius-sm); border:1px solid color-mix(in srgb, var(--critical) 40%, var(--border)); background:color-mix(in srgb, var(--critical) 10%, var(--card)); color:var(--text); font-size:12.5px; margin-bottom:16px; }
 .alert-box .nav-ico{ color:var(--critical); flex:none; margin-top:1px; }
@@ -761,3 +761,8 @@ body:not(.perfil-admin) .scenario-radio{ pointer-events:none; cursor:default; op
 .widget-row .widget-move button svg{ width:13px; height:13px; }
 .widget-row .widget-move button:disabled{ opacity:.3; cursor:default; }
 .widget-row .widget-move button:not(:disabled):hover{ background: color-mix(in srgb, var(--brand-green-soft) 14%, transparent); border-color:var(--brand-green-soft); color:var(--brand-green-soft); }
+
+.pref-row{ display:flex; gap:16px; padding:8px 0; border-bottom:1px solid var(--border); font-size:13px; }
+.pref-row:last-child{ border-bottom:none; }
+.pref-label{ flex:0 0 140px; color:var(--text-dim); }
+.pref-value{ font-weight:600; word-break:break-word; }

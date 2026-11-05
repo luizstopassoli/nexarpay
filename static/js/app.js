@@ -12,6 +12,7 @@ const PAGES = [
   { id: 'relatorios', label: 'Relatórios', ico: 'fileText', roles: ['admin', 'diretor', 'financeiro', 'gestor', 'rh'], render: () => renderRelatorios() },
   { id: 'propriedades', label: 'Propriedades', ico: 'props', roles: ['admin'], render: () => renderPropriedades() },
   { id: 'configuracoes', label: 'Configurações', ico: 'sliders', roles: ['admin'], render: () => renderConfiguracoes() },
+  { id: 'preferencias', label: 'Preferências', ico: 'user', roles: ['admin', 'diretor', 'financeiro', 'gestor', 'rh', 'colaborador', 'tv'], render: () => renderPreferencias() },
 ];
 let currentPage = 'solicitacoes';
 const DASHBOARD_GROUP_IDS = ['gerencial', 'dashboard', 'dashboard_tv'];
@@ -52,6 +53,7 @@ function pageSubtitleFor(id) {
     relatorios: 'Solicitações, orçado × realizado, rateio, aprovações, agenda de pagamentos e documentos fiscais — em tela, Excel e PDF',
     propriedades: 'Departamentos, categorias, fornecedores, clientes, empresas e setores',
     configuracoes: 'Usuários, perfis de acesso, aprovadores, backup e e-mail',
+    preferencias: 'Seus dados e a segurança da sua conta',
   }[id] || '';
 }
 window.__rerenderCurrentPage = () => { const def = PAGES.find(p => p.id === currentPage); if (def) def.render(); };
@@ -97,7 +99,7 @@ function renderUserCard() {
   card.innerHTML = `<div class="user-avatar">${escapeHtml(initials)}</div>
     <div class="user-meta"><div class="name" title="${escapeHtml(u.email)}">${escapeHtml(u.nome)}</div>
     <span class="role-badge ${u.perfil}">${escapeHtml(perfilLabel(u.perfil))}</span>
-    ${deps ? `<div class="mini-hint" style="margin-top:3px;" title="${escapeHtml(deps)}">${escapeHtml(deps)}</div>` : ''}</div>`;
+</div>`;
 }
 
 async function boot() {
@@ -107,7 +109,6 @@ async function boot() {
     document.getElementById('icoMoon').innerHTML = ICONS.moon;
     document.getElementById('icoSun').innerHTML = ICONS.sun;
     document.getElementById('icoLogout').innerHTML = ICONS.logout;
-    document.getElementById('icoKey').innerHTML = ICONS.key;
     document.getElementById('themeBtnDark').addEventListener('click', () => setTheme('dark'));
     document.getElementById('themeBtnLight').addEventListener('click', () => setTheme('light'));
     wireAuthUI();

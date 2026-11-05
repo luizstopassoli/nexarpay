@@ -26,8 +26,6 @@ function wireAuthUI() {
   document.getElementById('icoMfa').innerHTML = ICONS.key;
   document.getElementById('icoRs1').innerHTML = ICONS.key;
   document.getElementById('icoRs2').innerHTML = ICONS.key;
-  document.getElementById('icoMfaBtn').innerHTML = ICONS.lock;
-  document.getElementById('icoSessionsBtn').innerHTML = ICONS.list;
 
   const loginForm = document.getElementById('loginForm');
   loginForm.addEventListener('submit', async (e) => {
@@ -74,8 +72,6 @@ function wireAuthUI() {
     } catch (err) { showFormError('resetError', err.message); }
   });
   document.getElementById('resetBack').addEventListener('click', () => { window.__resetToken = null; showLoginStep('login'); });
-  document.getElementById('mfaBtn').addEventListener('click', openMfaModal);
-  document.getElementById('sessionsBtn').addEventListener('click', openSessoesModal);
 
   document.getElementById('forgotLink').addEventListener('click', () => showLoginStep('forgot'));
   document.getElementById('backToLogin').addEventListener('click', () => showLoginStep('login'));
@@ -111,7 +107,6 @@ function wireAuthUI() {
     DB.user = null;
     showLoginScreen();
   });
-  document.getElementById('changeMyPassBtn').addEventListener('click', openChangePasswordModal);
 
   window.__onSessionExpired = () => { toast('Sua sessão expirou. Faça login novamente.', 'error'); DB.user = null; closeModal(); showLoginScreen(); };
 }

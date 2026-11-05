@@ -95,7 +95,7 @@ PERFIS = {
 TIPOS_SOLICITACAO = {
     'fornecedor': 'Cliente/Fornecedor',
     'reembolso': 'Reembolso',
-    'grupo': 'Grupo Gpac',
+    'grupo': 'Interno',
     'freelancer': 'Freelancer',
     'rescisao': 'Rescisões',
 }
@@ -2521,6 +2521,8 @@ CAMPOS_OBRIGATORIOS = {
 
 def validar_solicitacao(conn, user, body):
     tipo = body.get('tipo')
+    if tipo == 'fornecedor' and user['perfil'] == 'rh':
+        raise ApiError(403, 'O módulo Cliente/Fornecedor não está disponível para o perfil RH.')
     if tipo not in TIPOS_SOLICITACAO:
         raise ApiError(400, 'Tipo de solicitação inválido.')
     d = body.get('dados') or {}
