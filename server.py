@@ -3820,21 +3820,22 @@ class Handler(BaseHTTPRequestHandler):
             if not cond:
                 raise ApiError(403, msg)
 
-        # o Administrador não tem poder de aprovação próprio: só age como aprovador se for o(a) Diretor(a) designado(a)
+        # o Administrador age em qualquer etapa (única restrição: não age em solicitação criada por ele mesmo)
+        adm = user['perfil'] == 'admin'
         if status == 'aprovacao1':
-            exige(user['id'] == r['aprovador1_id'], 'Esta etapa cabe ao(à) Diretor(a) 1 desta solicitação.')
+            exige(adm or user['id'] == r['aprovador1_id'], 'Esta etapa cabe ao(à) Diretor(a) 1 desta solicitação.')
             etapa = 1
         elif status == 'aprovacao2':
-            exige(user['id'] == r['aprovador2_id'], 'Esta etapa cabe ao(à) Diretor(a) 2 desta solicitação.')
+            exige(adm or user['id'] == r['aprovador2_id'], 'Esta etapa cabe ao(à) Diretor(a) 2 desta solicitação.')
             etapa = 2
         elif status == 'rh':
-            exige(eh_rh1(user), 'Esta etapa cabe ao RH 1.')
+            exige(adm or eh_rh1(user), 'Esta etapa cabe ao RH 1.')
             etapa = ETAPA_RH
         elif status == 'rh2':
-            exige(eh_rh2(user), 'O acompanhamento cabe ao RH 2.')
+            exige(adm or eh_rh2(user), 'O acompanhamento cabe ao RH 2.')
             etapa = ETAPA_RH2
         elif status == 'financeiro':
-            exige(user['perfil'] == 'financeiro', 'Esta etapa cabe ao Financeiro.')
+            exige(adm or user['perfil'] == 'financeiro', 'Esta etapa cabe ao Financeiro.')
             etapa = 3
         else:
             raise ApiError(400, 'A solicitação não está em uma etapa de aprovação (%s).' % STATUS_LABEL.get(status, status))
