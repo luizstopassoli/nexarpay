@@ -17,6 +17,13 @@ services:
       NEXARPAY_DEMO_SENHA: "${DEMO_SENHA:?defina DEMO_SENHA no .env (10+ caracteres, letras e números)}"
       NEXARPAY_URL_BASE: "https://${DEMO_DOMINIO:?defina DEMO_DOMINIO no .env}"
       NEXARPAY_DOMINIO: "${DEMO_EMAIL_DOMINIO:-demo.example.com}"
+      # SMTP opcional (padrão: e-mails só no log). Também dá para configurar pela tela Configurações → E-mail.
+      NEXARPAY_SMTP_HOST: "${SMTP_HOST:-}"
+      NEXARPAY_SMTP_PORTA: "${SMTP_PORTA:-465}"
+      NEXARPAY_SMTP_SSL: "${SMTP_SSL:-1}"
+      NEXARPAY_SMTP_USUARIO: "${SMTP_USUARIO:-}"
+      NEXARPAY_SMTP_SENHA: "${SMTP_SENHA:-}"
+      NEXARPAY_SMTP_REMETENTE: "${SMTP_REMETENTE:-}"
     volumes:
       - nexarpay-data:/app/data
     networks: [proxy]

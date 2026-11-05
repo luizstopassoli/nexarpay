@@ -205,6 +205,15 @@ def load_config():
         cfg['url_base'] = os.environ['NEXARPAY_URL_BASE']
     if os.environ.get('NEXARPAY_DOMINIO'):
         cfg['dominio_permitido'] = os.environ['NEXARPAY_DOMINIO']
+    if os.environ.get('NEXARPAY_SMTP_HOST'):  # SMTP por variáveis de ambiente (Docker); a tela de Configurações, se usada, prevalece
+        e = cfg['email']
+        e.update({'modo': 'smtp', 'host': os.environ['NEXARPAY_SMTP_HOST'],
+                  'porta': int(os.environ.get('NEXARPAY_SMTP_PORTA') or 465),
+                  'ssl': (os.environ.get('NEXARPAY_SMTP_SSL', '1') != '0'),
+                  'usuario': os.environ.get('NEXARPAY_SMTP_USUARIO', ''),
+                  'senha': os.environ.get('NEXARPAY_SMTP_SENHA', '')})
+        if os.environ.get('NEXARPAY_SMTP_REMETENTE'):
+            e['remetente'] = os.environ['NEXARPAY_SMTP_REMETENTE']
     return cfg
 
 
@@ -581,6 +590,24 @@ def get_ajuste(conn, chave, padrao=None):
 
 def set_ajuste(conn, chave, valor):
     conn.execute('INSERT OR REPLACE INTO ajustes(chave,valor) VALUES(?,?)', (chave, j(valor)))
+
+
+CAMPOS_SMTP = ('modo', 'host', 'porta', 'ssl', 'usuario', 'remetente')
+
+
+def aplicar_smtp_db(conn):
+    """Se o admin salvou o SMTP pela tela, ele passa a valer (a senha fica cifrada no banco)."""
+    c = get_ajuste(conn, 'smtp', None)
+    if not c:
+        return False
+    e = CONFIG['email']
+    for k in CAMPOS_SMTP:
+        if k in c:
+            e[k] = c[k]
+    if c.get('senha'):
+        e['senha'] = decifrar(c['senha'])
+    e['_origem'] = 'tela'
+    return True
 
 
 def grupo_nome(conn):
@@ -4118,7 +4145,7 @@ class Handler(BaseHTTPRequestHandler):
                 'sistema': 'NexarPay', 'versao': 2, 'exportadoEm': now_iso(),
                 'departamentos': [row_to_dict(r) for r in conn.execute('SELECT * FROM departamentos')],
                 'empresas': [row_to_dict(r) for r in conn.execute('SELECT * FROM empresas')],
-                'ajustes': {r['chave']: pj(r['valor'], None) for r in conn.execute('SELECT * FROM ajustes')},
+                'ajustes': {r['chave']: pj(r['valor'], None) for r in conn.execute("SELECT * FROM ajustes WHERE chave<>'smtp'")},
                 'anos_fechados': [row_to_dict(r) for r in conn.execute('SELECT * FROM anos_fechados')],
                 # sem credenciais: hash/salt de senha e de recuperação nunca saem do banco (na importação os hashes atuais são mantidos)
                 'users': [{k: v for k, v in row_to_dict(r).items() if k not in CAMPOS_CREDENCIAL} for r in conn.execute('SELECT * FROM users')],
@@ -4201,8 +4228,11 @@ class Handler(BaseHTTPRequestHandler):
         for r in conn.execute('SELECT id,email,senha_hash,salt,mfa_secret,mfa_ativo,mfa_codes,mfa_ultimo_passo FROM users'):
             atuais[r['id']] = atuais[r['email']] = (r['senha_hash'], r['salt'])
             mfa_atuais[r['id']] = mfa_atuais[r['email']] = (r['mfa_secret'], r['mfa_ativo'], r['mfa_codes'], r['mfa_ultimo_passo'])
+        smtp_atual = get_ajuste(conn, 'smtp', None)  # SMTP é da instalação, não do backup: sobrevive à importação
         for t in ('historico', 'solicitacoes', 'launches', 'budgets', 'properties', 'sessions', 'users', 'departamentos', 'arquivos', 'empresas', 'ajustes', 'anos_fechados'):
             conn.execute('DELETE FROM %s' % t)
+        if smtp_atual:
+            set_ajuste(conn, 'smtp', smtp_atual)
         for a in data.get('anos_fechados', []):
             conn.execute('INSERT INTO anos_fechados(ano,fechado_em,fechado_por) VALUES(?,?,?)', (a['ano'], a.get('fechado_em'), a.get('fechado_por')))
         for e in data.get('empresas', []):
@@ -4487,6 +4517,39 @@ class Handler(BaseHTTPRequestHandler):
         if method == 'GET' and sub == 'ver' and len(parts) > 2:
             r = conn.execute('SELECT * FROM email_log WHERE id=?', (int(parts[2]),)).fetchone()
             return self.send_json({'email': row_to_dict(r)})
+        if sub == 'config' and method == 'GET':
+            e = CONFIG['email']
+            return self.send_json({'config': {'modo': e.get('modo', 'simulado'), 'host': e.get('host') or '', 'porta': int(e.get('porta') or 465),
+                                              'ssl': bool(e.get('ssl', True)), 'usuario': e.get('usuario') or '', 'remetente': e.get('remetente') or '',
+                                              'senhaDefinida': bool(e.get('senha')) and not str(e.get('senha')).startswith('COLOQUE'),
+                                              'origem': e.get('_origem') or ('ambiente' if os.environ.get('NEXARPAY_SMTP_HOST') else 'arquivo')}})
+        if sub == 'config' and method == 'PUT':
+            self.exige_reauth(conn, user)
+            modo = 'smtp' if body.get('modo') == 'smtp' else 'simulado'
+            host = str(body.get('host') or '').strip()[:200]
+            usuario = str(body.get('usuario') or '').strip()[:200]
+            remetente = str(body.get('remetente') or '').strip()[:300]
+            try:
+                porta = int(body.get('porta') or 0)
+            except (TypeError, ValueError):
+                porta = 0
+            if modo == 'smtp':
+                if not re.fullmatch(r'[A-Za-z0-9.-]{1,200}', host):
+                    raise ApiError(400, 'Servidor SMTP inválido (informe só o nome, ex.: smtp.office365.com).')
+                if not 1 <= porta <= 65535:
+                    raise ApiError(400, 'Porta inválida.')
+                if '\n' in remetente or '\r' in remetente or '\n' in usuario or '\r' in usuario:
+                    raise ApiError(400, 'Valor inválido.')
+            atual = get_ajuste(conn, 'smtp', {}) or {}
+            nova = str(body.get('senha') or '')
+            sen_atual = CONFIG['email'].get('senha')
+            senha_cif = cifrar(nova) if nova else (atual.get('senha') or (cifrar(sen_atual) if sen_atual and not str(sen_atual).startswith('COLOQUE') else ''))
+            set_ajuste(conn, 'smtp', {'modo': modo, 'host': host, 'porta': porta, 'ssl': bool(body.get('ssl')), 'usuario': usuario,
+                                      'remetente': remetente or usuario, 'senha': senha_cif})
+            conn.commit()
+            aplicar_smtp_db(conn)
+            self.audit(conn, user, 'email.config_alterada', 'smtp', {'modo': modo, 'host': host, 'porta': porta, 'ssl': bool(body.get('ssl')), 'usuario': usuario, 'senhaAlterada': bool(nova)})
+            return self.send_json({'ok': True})
         if method == 'POST' and sub == 'teste':
             para = (body.get('para') or user['email']).strip()
             enviar_email(para, 'NexarPay — Teste de envio', 'Este é um e-mail de teste enviado pelo NexarPay em %s.\n\nAtenciosamente\nNexarPay' % fmt_data_hora(now_iso()), sincrono=True)
@@ -4520,6 +4583,11 @@ class ServidorLimitado(ThreadingHTTPServer):
 
 def main():
     init_db()
+    _c = db()
+    try:
+        aplicar_smtp_db(_c)
+    finally:
+        _c.close()
     if '--relatorios-agendados' in sys.argv:  # envia agora os relatórios agendados que estiverem no prazo (também útil em cron)
         conn = db()
         print('%d envio(s) agendado(s).' % executar_agendamentos(conn))

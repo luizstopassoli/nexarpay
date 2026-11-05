@@ -6,7 +6,8 @@ async function renderConfiguracoes() {
   const el = document.getElementById('page-configuracoes');
   el.innerHTML = `<div class="empty-state">${ICONS.clock}<h4>Carregando…</h4></div>`;
   try {
-    const [u, l] = await Promise.all([api('GET', '/users'), api('GET', '/email/log')]);
+    const [u, l, sm] = await Promise.all([api('GET', '/users'), api('GET', '/email/log'), api('GET', '/email/config')]);
+    cfgState.smtp = sm.config;
     cfgState.users = u.users; cfgState.emailLog = l.log; cfgState.emailModo = l.modo;
   } catch (e) { el.innerHTML = emptyState('alert', 'Não foi possível carregar', e.message); return; }
   if (currentPage !== 'configuracoes') return;
@@ -39,7 +40,8 @@ async function renderConfiguracoes() {
       <div class="grid grid-2">
         <div class="card kpi hoverable"><div class="kpi-top"><span class="kpi-label">Modo atual</span><div class="kpi-ico" style="background:color-mix(in srgb, ${cssVar(cfgState.emailModo === 'smtp' ? '--good' : '--warning')} 18%, transparent); color:${cssVar(cfgState.emailModo === 'smtp' ? '--good' : '--warning')};">${ICONS.mail}</div></div>
           <div class="kpi-value" style="font-size:18px;">${cfgState.emailModo === 'smtp' ? 'SMTP (envio real)' : 'Simulado (somente registro)'}</div>
-          <div class="kpi-sub">Configure em <code>config.json</code> na pasta do servidor: <code>"modo": "smtp"</code>, usuário e senha de app do Google Workspace. Reinicie o servidor após alterar.</div>
+          <div class="kpi-sub">${cfgState.smtp ? (cfgState.smtp.modo === 'smtp' ? escapeHtml(cfgState.smtp.host + ':' + cfgState.smtp.porta + ' · ' + cfgState.smtp.usuario) : 'Nenhum servidor SMTP ativo: os e-mails só ficam registrados no log.') : ''}</div>
+          <div style="margin-top:10px;"><button class="btn btn-sm" id="smtpCfgBtn">${ICONS.settings || ICONS.edit}Configurar servidor SMTP</button></div>
           <div style="display:flex; gap:8px; margin-top:12px;"><input class="input" id="emailTestePara" placeholder="destinatário do teste" value="${escapeHtml(DB.user.email)}" style="flex:1;"/><button class="btn btn-sm" id="emailTesteBtn">${ICONS.send}Enviar teste</button></div></div>
         <div class="card table-card"><div class="table-toolbar"><div class="hint">Últimos e-mails (${cfgState.emailLog.length})</div></div>
           <div class="table-scroll" style="max-height:260px;"><table class="data-table email-log"><thead><tr><th>Data</th><th>Para</th><th>Assunto</th><th>Status</th></tr></thead>
@@ -75,6 +77,7 @@ async function renderConfiguracoes() {
   el.querySelectorAll('[data-edit-user]').forEach(b => b.addEventListener('click', () => openUserForm(b.dataset.editUser)));
   el.querySelectorAll('[data-del-user]').forEach(b => b.addEventListener('click', () => deleteUser(b.dataset.delUser)));
   el.querySelectorAll('[data-email]').forEach(tr => tr.addEventListener('click', async () => { try { const r = (await api('GET', `/email/ver/${tr.dataset.email}`)).email; openModal(`<div class="modal-head"><h3>${modalIcon('mail')} ${escapeHtml(r.assunto)}</h3><button class="modal-close" data-close-modal>${ICONS.x}</button></div><div class="modal-body"><p class="cell-dim" style="font-size:12px;">Para: ${escapeHtml(r.para)} · ${fmtDateTime(r.data)} · ${r.status}${r.erro ? ' — ' + escapeHtml(r.erro) : ''}${r.anexo ? ' · anexo: ' + escapeHtml(r.anexo.split('/').pop()) : ''}</p><pre style="white-space:pre-wrap; font-family:inherit; font-size:13px; margin-top:12px; background:var(--card-alt); padding:14px; border-radius:10px;">${escapeHtml(r.corpo)}</pre></div><div class="modal-foot"><button class="btn" data-close-modal>Fechar</button></div>`, { size: 'lg' }); } catch (e) { toast(e.message, 'error'); } }));
+  document.getElementById('smtpCfgBtn').addEventListener('click', () => smtpDialog());
   document.getElementById('emailTesteBtn').addEventListener('click', async () => { const b = document.getElementById('emailTesteBtn'); b.disabled = true; try { const r = await api('POST', '/email/teste', { para: document.getElementById('emailTestePara').value }); toast(r.status === 'enviado' ? 'E-mail de teste enviado.' : r.status === 'simulado' ? 'Modo simulado: e-mail registrado no log (não enviado).' : 'Falha: ' + (r.erro || ''), r.status === 'erro' ? 'error' : 'success'); renderConfiguracoes(); } catch (e) { toast(e.message, 'error'); b.disabled = false; } });
   document.getElementById('cfgImportInput').addEventListener('change', async (e) => {
     const file = e.target.files[0]; if (!file) return;
@@ -132,4 +135,31 @@ async function deleteUser(userId) {
   const u = cfgState.users.find(x => x.id === userId); if (!u) return;
   if (!await confirmDialog({ title: 'Excluir usuário', message: `Excluir o acesso de "${u.nome}"? Se participar de solicitações, será apenas desativado (mantido no histórico).` })) return;
   try { const r = await api('DELETE', `/users/${userId}`); toast(r.mensagem || 'Usuário excluído.', 'success'); await loadBootstrap(); renderConfiguracoes(); } catch (e) { toast(e.message, 'error'); }
+}
+
+
+function smtpDialog() {
+  const c = cfgState.smtp || {};
+  const pre = { gmail: ['smtp.gmail.com', 465, true], o365: ['smtp.office365.com', 587, false], outro: null };
+  openModal(`<div class="modal-head"><h3>${modalIcon('mail')} Servidor de e-mail (SMTP)</h3><button class="modal-close" data-close-modal>${ICONS.x}</button></div>
+    <form id="smtpForm"><div class="modal-body">
+      <div class="form-field"><label>Envio de e-mails</label><select name="modo"><option value="smtp"${c.modo === 'smtp' ? ' selected' : ''}>Ativo (SMTP, envio real)</option><option value="simulado"${c.modo !== 'smtp' ? ' selected' : ''}>Simulado (só registra no log)</option></select></div>
+      <div class="form-field"><label>Modelo rápido</label><select id="smtpPre"><option value="">— escolher —</option><option value="gmail">Google Workspace / Gmail (465, SSL)</option><option value="o365">Microsoft 365 (587, STARTTLS)</option></select></div>
+      <div class="form-field"><label>Servidor SMTP</label><input class="input" name="host" placeholder="smtp.suaempresa.com.br" value="${escapeHtml(c.host || '')}"/></div>
+      <div class="form-field"><label>Porta</label><input class="input" type="number" name="porta" value="${escapeHtml(String(c.porta || 465))}"/></div>
+      <div class="form-field"><label><input type="checkbox" name="ssl"${c.ssl ? ' checked' : ''}/> Conexão SSL direta (porta 465). Desmarcado usa STARTTLS (porta 587).</label></div>
+      <div class="form-field"><label>Usuário</label><input class="input" name="usuario" autocomplete="off" value="${escapeHtml(c.usuario || '')}"/></div>
+      <div class="form-field"><label>Senha</label><input class="input" type="password" name="senha" autocomplete="new-password" placeholder="${c.senhaDefinida ? '•••••••• (deixe em branco para manter)' : 'senha ou senha de app'}"/><span class="form-hint">Guardada cifrada no banco. Nunca é exibida nem entra no backup.</span></div>
+      <div class="form-field"><label>Remetente</label><input class="input" name="remetente" placeholder="NexarPay &lt;sistema@suaempresa.com.br&gt;" value="${escapeHtml(c.remetente || '')}"/></div>
+      <p class="form-hint">Depois de salvar, use "Enviar teste" para validar. A alteração vale na hora, sem reiniciar.</p>
+    </div><div class="modal-foot"><button type="button" class="btn" data-close-modal>Cancelar</button><button type="submit" class="btn btn-primary">Salvar</button></div></form>`, { size: 'md' });
+  const f = document.getElementById('smtpForm');
+  document.getElementById('smtpPre').addEventListener('change', e => { const p = pre[e.target.value]; if (p) { f.host.value = p[0]; f.porta.value = p[1]; f.ssl.checked = p[2]; } });
+  f.addEventListener('submit', async ev => {
+    ev.preventDefault();
+    try {
+      await api('PUT', '/email/config', { modo: f.modo.value, host: f.host.value.trim(), porta: f.porta.value, ssl: f.ssl.checked, usuario: f.usuario.value.trim(), senha: f.senha.value, remetente: f.remetente.value.trim() });
+      closeModal(); toast('Configuração de e-mail salva.', 'success'); renderConfiguracoes();
+    } catch (e) { toast(e.message, 'error'); }
+  });
 }
