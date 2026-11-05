@@ -12,7 +12,7 @@ const PAGES = [
   { id: 'relatorios', label: 'Relatórios', ico: 'fileText', roles: ['admin', 'diretor', 'financeiro', 'gestor', 'rh'], render: () => renderRelatorios() },
   { id: 'propriedades', label: 'Propriedades', ico: 'props', roles: ['admin'], render: () => renderPropriedades() },
   { id: 'configuracoes', label: 'Configurações', ico: 'sliders', roles: ['admin'], render: () => renderConfiguracoes() },
-  { id: 'preferencias', label: 'Preferências', ico: 'user', roles: ['admin', 'diretor', 'financeiro', 'gestor', 'rh', 'colaborador', 'tv'], render: () => renderPreferencias() },
+  { id: 'preferencias', label: 'Preferências', ico: 'user', oculto: true, roles: ['admin', 'diretor', 'financeiro', 'gestor', 'rh', 'colaborador', 'tv'], render: () => renderPreferencias() },
 ];
 let currentPage = 'solicitacoes';
 const DASHBOARD_GROUP_IDS = ['gerencial', 'dashboard', 'dashboard_tv'];
@@ -29,6 +29,7 @@ function navigateTo(pageId) {
   if (pageId === 'relatorios') relState.rid = null; // clicar em Relatórios sempre volta ao menu de relatórios
   if (DASHBOARD_GROUP_IDS.includes(pageId)) dashboardGroupOpen = true;
   buildSidebar();
+  const prefLink = document.getElementById('userPrefLink'); if (prefLink) prefLink.classList.toggle('active', pageId === 'preferencias');
   document.querySelectorAll('.page').forEach(p => p.classList.toggle('page-hidden', p.id !== `page-${pageId}`));
   const def = PAGES.find(p => p.id === pageId);
   document.getElementById('pageTitle').textContent = def.label;
@@ -61,7 +62,7 @@ window.__rerenderCurrentPage = () => { const def = PAGES.find(p => p.id === curr
 function navItemHtml(p) { return `<div class="nav-item ${p.id === currentPage ? 'active' : ''}" data-page="${p.id}">${icon(p.ico)}<span>${p.label}</span></div>`; }
 function buildSidebar() {
   const nav = document.getElementById('navList');
-  const pages = pagesForCurrentUser();
+  const pages = pagesForCurrentUser().filter(p => !p.oculto);  // "oculto": só aparece pelo cartão do usuário
   const dashPages = pages.filter(p => DASHBOARD_GROUP_IDS.includes(p.id));
   const otherPages = pages.filter(p => !DASHBOARD_GROUP_IDS.includes(p.id));
   let html = '';
@@ -99,7 +100,11 @@ function renderUserCard() {
   card.innerHTML = `<div class="user-avatar">${escapeHtml(initials)}</div>
     <div class="user-meta"><div class="name" title="${escapeHtml(u.email)}">${escapeHtml(u.nome)}</div>
     <span class="role-badge ${u.perfil}">${escapeHtml(perfilLabel(u.perfil))}</span>
+    <div class="user-pref ${currentPage === 'preferencias' ? 'active' : ''}" id="userPrefLink" role="button" tabindex="0">${ICONS.user}<span>Preferências</span></div>
 </div>`;
+  const go = document.getElementById('userPrefLink');
+  go.addEventListener('click', () => navigateTo('preferencias'));
+  go.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigateTo('preferencias'); } });
 }
 
 async function boot() {

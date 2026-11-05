@@ -2326,7 +2326,7 @@ def eh_rh2(u):
 
 
 def pode_solicitar_rescisao(u):
-    return u['perfil'] == 'financeiro' or eh_rh1(u) or eh_rh2(u)
+    return u['perfil'] in ('admin', 'financeiro') or eh_rh1(u) or eh_rh2(u)
 
 
 def pode_ver_todos_deps(u):

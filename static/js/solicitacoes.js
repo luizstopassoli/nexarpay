@@ -2,7 +2,7 @@
 
 const solState = { search: '', status: '', dep: '', tipo: '', page: 1, pageSize: 12 };
 const ABERTAS = ['aprovacao1', 'aprovacao2', 'rh', 'rh2', 'financeiro'];
-function podeSolicitarRescisao() { const me = DB.user; return !!me && (me.perfil === 'financeiro' || !!me.rh1 || !!me.rh2); }
+function podeSolicitarRescisao() { const me = DB.user; return !!me && (me.perfil === 'admin' || me.perfil === 'financeiro' || !!me.rh1 || !!me.rh2); }
 
 function aguardaMinhaAcao(s) {
   const me = DB.user;

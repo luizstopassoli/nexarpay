@@ -131,13 +131,14 @@ function viewLaunch(id) {
 function openLaunchForm(id) {
   const editing = id !== undefined;
   const deps = depsVisiveis();
+  // listas que ainda não existem no cadastro (instalação nova/demo) não podem impedir o formulário de abrir
+  const P = Object.assign({ categorias: [], fornecedores: [], tiposCompra: [], setores: [], subsetores: [], clientes: [] }, DB.properties || {});
   const l = editing ? DB.launches.find(x => x.id === id) : {
-    id: null, descricao: '', quantidade: 1, categoria: DB.properties.categorias[0] || '', fornecedor: DB.properties.fornecedores[0] || '', custoAquisicaoBRL: 0, custoAquisicaoUSD: 0, custoTotal: 0,
-    dataCompra: todayISO(), ano: new Date().getFullYear(), tipoCompra: DB.properties.tiposCompra[0] || '', dataVencimento: '', empresaId: '', usadoPor: '', setor: DB.properties.setores[0] || '',
+    id: null, descricao: '', quantidade: 1, categoria: P.categorias[0] || '', fornecedor: P.fornecedores[0] || '', custoAquisicaoBRL: 0, custoAquisicaoUSD: 0, custoTotal: 0,
+    dataCompra: todayISO(), ano: new Date().getFullYear(), tipoCompra: P.tiposCompra[0] || '', dataVencimento: '', empresaId: '', usadoPor: '', setor: P.setores[0] || '',
     subsetor: '', usuarioConta: '', senhaSerial: '', paraQueServe: '', numPedido: null, notaFiscal: null, departamentoId: deps[0] ? deps[0].id : '',
   };
-  const P = DB.properties;
-  const opts = (arr, sel) => arr.map(v => `<option value="${escapeHtml(v)}" ${v === sel ? 'selected' : ''}>${escapeHtml(v)}</option>`).join('');
+  const opts = (arr, sel) => (arr || []).map(v => `<option value="${escapeHtml(v)}" ${v === sel ? 'selected' : ''}>${escapeHtml(v)}</option>`).join('');
   openModal(`
     <div class="modal-head"><h3>${modalIcon(editing ? 'edit' : 'plus')} ${editing ? 'Editar' : 'Novo'} Lançamento</h3><button class="modal-close" data-close-modal>${ICONS.x}</button></div>
     <div class="modal-body"><form id="launchForm"><div class="form-grid">
