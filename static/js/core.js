@@ -196,7 +196,7 @@ function openModal(html, { size = 'md', locked = false } = {}) {
   bd.classList.add('open');
   document.body.style.overflow = 'hidden';
   bd.querySelectorAll('[data-close-modal]').forEach(b => b.addEventListener('click', closeModal));
-  bd.onclick = locked ? null : (e) => { if (e.target === bd) closeModal(); };
+  bd.onclick = null;  // clicar fora NUNCA fecha: sair só por X, Cancelar ou salvar/registrar
 }
 function closeModal() {
   const bd = modalBackdrop();
@@ -213,7 +213,6 @@ function confirmDialog({ title = 'Confirmar ação', message = 'Tem certeza?', o
     const bd = modalBackdrop();
     document.getElementById('confirmOkBtn').addEventListener('click', () => { closeModal(); resolve(true); });
     document.getElementById('confirmCancelBtn').addEventListener('click', () => { closeModal(); resolve(false); });
-    bd.onclick = (e) => { if (e.target === bd) { closeModal(); resolve(false); } };
   });
 }
 // Modal com campo de justificativa obrigatória (Alterar / Reprovar)
@@ -229,7 +228,6 @@ function justificativaDialog({ title, message, okLabel, danger = false, placehol
     const bd = modalBackdrop();
     const done = (v) => { closeModal(); resolve(v); };
     document.getElementById('justCancel').addEventListener('click', () => done(null));
-    bd.onclick = (e) => { if (e.target === bd) done(null); };
     document.getElementById('justOk').addEventListener('click', () => {
       const t = document.getElementById('justTxt').value.trim();
       if (t.length < 5) { document.getElementById('justTxt').classList.add('error'); toast('Informe a justificativa (mínimo 5 caracteres).', 'error'); return; }

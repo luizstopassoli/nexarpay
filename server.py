@@ -4555,6 +4555,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({'ok': True})
         if method == 'POST' and sub == 'teste':
             para = (body.get('para') or user['email']).strip()
+            conn.commit()  # solta o bloqueio de escrita do SQLite (renovação da sessão) antes do envio demorado; senão o log não grava e o sistema todo trava
             enviar_email(para, 'NexarPay — Teste de envio', 'Este é um e-mail de teste enviado pelo NexarPay em %s.\n\nAtenciosamente\nNexarPay' % fmt_data_hora(now_iso()), sincrono=True)
             r = conn.execute('SELECT status,erro FROM email_log ORDER BY id DESC LIMIT 1').fetchone()
             return self.send_json({'status': r['status'], 'erro': r['erro'], 'modo': (CONFIG.get('email') or {}).get('modo')})

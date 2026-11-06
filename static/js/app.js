@@ -4,7 +4,7 @@
 // Gestor(a): dashboard do(s) seu(s) departamento(s), solicitações, lançamentos e orçamento (consulta). Colaborador(a): só solicitações.
 const PAGES = [
   { id: 'gerencial', label: 'Dashboard Gerencial', ico: 'pie', roles: ['admin', 'diretor', 'financeiro'], render: () => renderGerencial() },
-  { id: 'dashboard', label: 'Dashboard', ico: 'dashboard', roles: ['admin', 'gestor', 'rh'], render: () => renderDashboard() },
+  { id: 'dashboard', label: 'Dashboard', ico: 'dashboard', roles: ['gestor', 'rh'], render: () => renderDashboard() },
   { id: 'dashboard_tv', label: 'Dashboard (TV)', ico: 'tv', roles: ['admin', 'tv'], render: () => renderDashboardTV() },
   { id: 'solicitacoes', label: 'Solicitações', ico: 'send', roles: ['admin', 'diretor', 'financeiro', 'gestor', 'rh', 'colaborador'], render: () => renderSolicitacoes() },
   { id: 'lancamentos', label: 'Lançamentos', ico: 'list', roles: ['admin', 'diretor', 'financeiro', 'gestor', 'rh'], render: () => renderLancamentos() },
@@ -16,7 +16,7 @@ const PAGES = [
 ];
 let currentPage = 'solicitacoes';
 const DASHBOARD_GROUP_IDS = ['gerencial', 'dashboard', 'dashboard_tv'];
-let dashboardGroupOpen = true;
+let dashboardGroupOpen = false;  // o grupo Dashboards sempre começa recolhido
 
 // perfil "tv": acesso somente ao Dashboard (TV) — nenhuma outra página aparece no menu nem é acessível.
 function defaultPageFor(p) { return ({ admin: 'gerencial', diretor: 'gerencial', financeiro: 'gerencial', gestor: 'dashboard', rh: 'dashboard', colaborador: 'solicitacoes', tv: 'dashboard_tv' })[p] || 'solicitacoes'; }
@@ -27,7 +27,6 @@ function navigateTo(pageId) {
   if (!allowed.find(p => p.id === pageId)) pageId = (allowed[0] && allowed[0].id) || 'solicitacoes';
   currentPage = pageId;
   if (pageId === 'relatorios') relState.rid = null; // clicar em Relatórios sempre volta ao menu de relatórios
-  if (DASHBOARD_GROUP_IDS.includes(pageId)) dashboardGroupOpen = true;
   buildSidebar();
   const prefLink = document.getElementById('userPrefLink'); if (prefLink) prefLink.classList.toggle('active', pageId === 'preferencias');
   document.querySelectorAll('.page').forEach(p => p.classList.toggle('page-hidden', p.id !== `page-${pageId}`));
