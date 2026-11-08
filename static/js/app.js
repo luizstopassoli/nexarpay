@@ -4,7 +4,7 @@
 // Gestor(a): dashboard do(s) seu(s) departamento(s), solicitações, lançamentos e orçamento (consulta). Colaborador(a): só solicitações.
 const PAGES = [
   { id: 'gerencial', label: 'Dashboard Gerencial', ico: 'pie', roles: ['admin', 'diretor', 'financeiro'], render: () => renderGerencial() },
-  { id: 'dashboard', label: 'Dashboard', ico: 'dashboard', roles: ['gestor', 'rh'], render: () => renderDashboard() },
+  { id: 'dashboard', label: 'Dashboard', ico: 'dashboard', roles: ['admin', 'gestor', 'rh'], render: () => renderDashboard() },
   { id: 'dashboard_tv', label: 'Dashboard (TV)', ico: 'tv', roles: ['admin', 'tv'], render: () => renderDashboardTV() },
   { id: 'solicitacoes', label: 'Solicitações', ico: 'send', roles: ['admin', 'diretor', 'financeiro', 'gestor', 'rh', 'colaborador'], render: () => renderSolicitacoes() },
   { id: 'lancamentos', label: 'Lançamentos', ico: 'list', roles: ['admin', 'diretor', 'financeiro', 'gestor', 'rh'], render: () => renderLancamentos() },
@@ -19,7 +19,7 @@ const DASHBOARD_GROUP_IDS = ['gerencial', 'dashboard', 'dashboard_tv'];
 let dashboardGroupOpen = false;  // o grupo Dashboards sempre começa recolhido
 
 // perfil "tv": acesso somente ao Dashboard (TV) — nenhuma outra página aparece no menu nem é acessível.
-function defaultPageFor(p) { return ({ admin: 'gerencial', diretor: 'gerencial', financeiro: 'gerencial', gestor: 'dashboard', rh: 'dashboard', colaborador: 'solicitacoes', tv: 'dashboard_tv' })[p] || 'solicitacoes'; }
+function defaultPageFor(p) { return ({ admin: 'dashboard', diretor: 'gerencial', financeiro: 'gerencial', gestor: 'dashboard', rh: 'dashboard', colaborador: 'solicitacoes', tv: 'dashboard_tv' })[p] || 'solicitacoes'; }
 function pagesForCurrentUser() { const p = perfil(); return PAGES.filter(pg => pg.roles.includes(p)); }
 
 function navigateTo(pageId) {
@@ -66,12 +66,15 @@ function buildSidebar() {
   const otherPages = pages.filter(p => !DASHBOARD_GROUP_IDS.includes(p.id));
   let html = '';
   if (dashPages.length > 1) {
-    const activeInGroup = dashPages.some(p => p.id === currentPage);
-    html += `<div class="nav-item nav-group-toggle ${activeInGroup ? 'active-parent' : ''}" data-group-toggle="dashboards">
-        ${icon('layers')}<span class="nav-group-label-text">Dashboards</span><span class="nav-caret ${dashboardGroupOpen ? 'open' : ''}">${ICONS.chevDown}</span>
+    // Administrador: "Dashboard" (do Gestor) é o principal e abre direto; a seta expande Gerencial e TV (sempre recolhido ao abrir)
+    const main = dashPages.find(p => p.id === 'dashboard') || dashPages[0];
+    const subs = dashPages.filter(p => p !== main);
+    const activeInSub = subs.some(p => p.id === currentPage);
+    html += `<div class="nav-item nav-group-toggle ${main.id === currentPage ? 'active' : activeInSub ? 'active-parent' : ''}" data-page="${main.id}">
+        ${icon(main.ico)}<span class="nav-group-label-text">${main.label}</span><span class="nav-caret ${dashboardGroupOpen ? 'open' : ''}" data-group-toggle="dashboards" role="button" aria-label="Mostrar outros dashboards" title="Outros dashboards">${ICONS.chevDown}</span>
       </div>
       <div class="nav-submenu ${dashboardGroupOpen ? 'open' : ''}" data-group-panel="dashboards">
-        ${dashPages.map(p => `<div class="nav-item nav-sub-item ${p.id === currentPage ? 'active' : ''}" data-page="${p.id}">${icon(p.ico)}<span>${p.label}</span></div>`).join('')}
+        ${subs.map(p => `<div class="nav-item nav-sub-item ${p.id === currentPage ? 'active' : ''}" data-page="${p.id}">${icon(p.ico)}<span>${p.label}</span></div>`).join('')}
       </div>`;
   } else {
     html += dashPages.map(navItemHtml).join('');
