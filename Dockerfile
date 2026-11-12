@@ -1,5 +1,7 @@
 FROM python:3.12-slim
-ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 TZ=America/Sao_Paulo
+# tzdata: sem ele o TZ é ignorado e o sistema grava datas/horas em UTC (3 h à frente do Brasil)
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata && rm -rf /var/lib/apt/lists/*
 RUN useradd --system --uid 10001 --home /app nexarpay
 WORKDIR /app
 COPY server.py ./

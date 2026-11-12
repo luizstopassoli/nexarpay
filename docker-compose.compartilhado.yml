@@ -11,6 +11,7 @@ services:
     container_name: nexarpay-app          # nome único na rede compartilhada (o Caddy usa este nome)
     restart: unless-stopped
     environment:
+      TZ: "America/Sao_Paulo"
       NEXARPAY_DEMO: "1"
       NEXARPAY_HTTPS: "1"
       NEXARPAY_TRUST_PROXY: "1"

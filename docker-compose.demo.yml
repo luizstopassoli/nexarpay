@@ -8,6 +8,7 @@ services:
     build: .
     restart: unless-stopped
     environment:
+      TZ: "America/Sao_Paulo"
       NEXARPAY_DEMO: "1"
       NEXARPAY_HTTPS: "1"
       NEXARPAY_TRUST_PROXY: "1"

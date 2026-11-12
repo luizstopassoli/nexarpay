@@ -8,6 +8,7 @@ services:
     build: .
     restart: unless-stopped
     environment:
+      TZ: "America/Sao_Paulo"
       NEXARPAY_HTTPS: "1"
       NEXARPAY_TRUST_PROXY: "1"
       NEXARPAY_ADMIN_EMAIL: "${APP_ADMIN_EMAIL:?defina APP_ADMIN_EMAIL no .env (e-mail do primeiro administrador)}"
