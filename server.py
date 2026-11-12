@@ -3820,7 +3820,7 @@ class Handler(BaseHTTPRequestHandler):
             if not cond:
                 raise ApiError(403, msg)
 
-        # o Administrador age em qualquer etapa (única restrição: não age em solicitação criada por ele mesmo)
+        # o Administrador age em qualquer etapa, inclusive nas solicitações criadas por ele mesmo
         adm = user['perfil'] == 'admin'
         if status == 'aprovacao1':
             exige(adm or user['id'] == r['aprovador1_id'], 'Esta etapa cabe ao(à) Diretor(a) 1 desta solicitação.')
@@ -3840,7 +3840,7 @@ class Handler(BaseHTTPRequestHandler):
         else:
             raise ApiError(400, 'A solicitação não está em uma etapa de aprovação (%s).' % STATUS_LABEL.get(status, status))
 
-        if user['id'] == r['solicitante_id']:  # vale para todos os perfis, inclusive Administrador
+        if user['id'] == r['solicitante_id'] and not adm:  # segregação de funções vale para todos os perfis, exceto o Administrador (sem restrição)
             raise ApiError(403, 'Segregação de funções: você não pode aprovar, reprovar ou devolver uma solicitação criada por você.')
         if etapa == ETAPA_RH2 and acao not in ('encerrar', 'ajustar'):
             raise ApiError(400, 'No acompanhamento o RH 2 pode ajustar valor/data de término ou encerrar a solicitação.')

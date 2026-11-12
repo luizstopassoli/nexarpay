@@ -7,8 +7,8 @@ function podeSolicitarRescisao() { const me = DB.user; return !!me && (me.perfil
 function aguardaMinhaAcao(s) {
   const me = DB.user;
   if (!me) return false;
+  if (me.perfil === 'admin') return ABERTAS.includes(s.status);  // Administrador age em qualquer etapa, inclusive nas próprias solicitações
   if (s.solicitanteId === me.id) return false;
-  if (me.perfil === 'admin') return ABERTAS.includes(s.status);
   if (me.perfil === 'financeiro') return s.status === 'financeiro';
   if (me.perfil === 'rh') return (s.status === 'rh' && !!me.rh1) || (s.status === 'rh2' && !!me.rh2);
   if (me.perfil === 'diretor' || me.perfil === 'admin') return (s.status === 'aprovacao1' && s.aprovador1Id === me.id) || (s.status === 'aprovacao2' && s.aprovador2Id === me.id);
