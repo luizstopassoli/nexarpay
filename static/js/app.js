@@ -3,10 +3,13 @@
 // Páginas e quem as vê. Administrador: tudo. Diretor(a)/Financeiro: dashboard gerencial + solicitações (+ consulta a lançamentos/orçamento).
 // Gestor(a): dashboard do(s) seu(s) departamento(s), solicitações, lançamentos e orçamento (consulta). Colaborador(a): só solicitações.
 const PAGES = [
-  { id: 'gerencial', label: 'Dashboard Gerencial', ico: 'pie', roles: ['admin', 'diretor', 'financeiro'], render: () => renderGerencial() },
-  { id: 'dashboard', label: 'Dashboard', ico: 'dashboard', roles: ['admin', 'gestor', 'rh'], render: () => renderDashboard() },
+  { id: 'gerencial', label: 'Dashboard Gerencial', ico: 'pie', roles: ['admin', 'diretor'], render: () => renderGerencial() },
+  { id: 'dashboard', label: 'Dashboard', ico: 'dashboard', roles: ['admin', 'gestor', 'rh', 'financeiro'], render: () => renderDashboard() },
   { id: 'dashboard_tv', label: 'Dashboard (TV)', ico: 'tv', roles: ['admin', 'tv'], render: () => renderDashboardTV() },
   { id: 'solicitacoes', label: 'Solicitações', ico: 'send', roles: ['admin', 'diretor', 'financeiro', 'gestor', 'rh', 'colaborador'], render: () => renderSolicitacoes() },
+  ...SOL_MODULOS.map(m => ({ id: m.id, label: m.label, ico: m.ico, sub: 'solicitacoes',
+    roles: m.tipo === 'rescisao' ? ['admin', 'diretor', 'financeiro', 'rh'] : m.tipo === 'fornecedor' ? ['admin', 'diretor', 'financeiro', 'gestor', 'colaborador'] : ['admin', 'diretor', 'financeiro', 'gestor', 'rh', 'colaborador'],
+    render: () => renderSolModulo(m.id) })),
   { id: 'lancamentos', label: 'Lançamentos', ico: 'list', roles: ['admin', 'diretor', 'financeiro', 'gestor', 'rh'], render: () => renderLancamentos() },
   { id: 'orcamento', label: 'Orçamento', ico: 'budget', roles: ['admin', 'diretor', 'financeiro', 'gestor', 'rh'], render: () => renderOrcamento() },
   { id: 'relatorios', label: 'Relatórios', ico: 'fileText', roles: ['admin', 'diretor', 'financeiro', 'gestor', 'rh'], render: () => renderRelatorios() },
@@ -16,10 +19,15 @@ const PAGES = [
 ];
 let currentPage = 'solicitacoes';
 const DASHBOARD_GROUP_IDS = ['gerencial', 'dashboard', 'dashboard_tv'];
-let dashboardGroupOpen = false;  // o grupo Dashboards sempre começa recolhido
+// Grupos expansíveis do menu (sempre começam recolhidos): o item principal abre a própria página; a seta mostra os demais
+const GRUPOS_MENU = [
+  { key: 'dashboards', main: 'dashboard', subs: ['gerencial', 'dashboard_tv'] },
+  { key: 'solicitacoes', main: 'solicitacoes', subs: SOL_MODULOS.map(m => m.id) },
+];
+const grupoAberto = {};
 
 // perfil "tv": acesso somente ao Dashboard (TV) — nenhuma outra página aparece no menu nem é acessível.
-function defaultPageFor(p) { return ({ admin: 'dashboard', diretor: 'gerencial', financeiro: 'gerencial', gestor: 'dashboard', rh: 'dashboard', colaborador: 'solicitacoes', tv: 'dashboard_tv' })[p] || 'solicitacoes'; }
+function defaultPageFor(p) { return ({ admin: 'dashboard', diretor: 'gerencial', financeiro: 'dashboard', gestor: 'dashboard', rh: 'dashboard', colaborador: 'solicitacoes', tv: 'dashboard_tv' })[p] || 'solicitacoes'; }
 function pagesForCurrentUser() { const p = perfil(); return PAGES.filter(pg => pg.roles.includes(p)); }
 
 function navigateTo(pageId) {
@@ -54,6 +62,11 @@ function pageSubtitleFor(id) {
     propriedades: 'Departamentos, categorias, fornecedores, clientes, empresas e setores',
     configuracoes: 'Usuários, perfis de acesso, aprovadores, backup e e-mail',
     preferencias: 'Seus dados e a segurança da sua conta',
+    sol_fornecedor: 'Pagamentos a fornecedores e reembolsos a clientes — aprovações e acompanhamento',
+    sol_reembolso: 'Despesas pagas pelo colaborador, com Aprovação Fiscal — aprovações e acompanhamento',
+    sol_freelancer: 'Contratação de profissionais autônomos — aprovações e acompanhamento',
+    sol_rescisao: 'Custos de desligamento de colaboradores — aprovações e acompanhamento',
+    sol_grupo: 'Despesas internas da empresa ou do Grupo — aprovações e acompanhamento',
   }[id] || '';
 }
 window.__rerenderCurrentPage = () => { const def = PAGES.find(p => p.id === currentPage); if (def) def.render(); };
@@ -62,28 +75,27 @@ function navItemHtml(p) { return `<div class="nav-item ${p.id === currentPage ? 
 function buildSidebar() {
   const nav = document.getElementById('navList');
   const pages = pagesForCurrentUser().filter(p => !p.oculto);  // "oculto": só aparece pelo cartão do usuário
-  const dashPages = pages.filter(p => DASHBOARD_GROUP_IDS.includes(p.id));
-  const otherPages = pages.filter(p => !DASHBOARD_GROUP_IDS.includes(p.id));
+  const ids = new Set(pages.map(p => p.id));
+  const subItem = (p) => `<div class="nav-item nav-sub-item ${p.id === currentPage ? 'active' : ''}" data-page="${p.id}">${icon(p.ico)}<span>${p.label}</span></div>`;
   let html = '';
-  if (dashPages.length > 1) {
-    // Administrador: "Dashboard" (do Gestor) é o principal e abre direto; a seta expande Gerencial e TV (sempre recolhido ao abrir)
-    const main = dashPages.find(p => p.id === 'dashboard') || dashPages[0];
-    const subs = dashPages.filter(p => p !== main);
-    const activeInSub = subs.some(p => p.id === currentPage);
-    html += `<div class="nav-item nav-group-toggle ${main.id === currentPage ? 'active' : activeInSub ? 'active-parent' : ''}" data-page="${main.id}">
-        ${icon(main.ico)}<span class="nav-group-label-text">${main.label}</span><span class="nav-caret ${dashboardGroupOpen ? 'open' : ''}" data-group-toggle="dashboards" role="button" aria-label="Mostrar outros dashboards" title="Outros dashboards">${ICONS.chevDown}</span>
-      </div>
-      <div class="nav-submenu ${dashboardGroupOpen ? 'open' : ''}" data-group-panel="dashboards">
-        ${subs.map(p => `<div class="nav-item nav-sub-item ${p.id === currentPage ? 'active' : ''}" data-page="${p.id}">${icon(p.ico)}<span>${p.label}</span></div>`).join('')}
-      </div>`;
-  } else {
-    html += dashPages.map(navItemHtml).join('');
-  }
-  html += otherPages.map(navItemHtml).join('');
+  pages.forEach(p => {
+    const g = GRUPOS_MENU.find(x => x.main === p.id);
+    const subs = g ? pages.filter(x => g.subs.includes(x.id)) : [];
+    if (g && subs.length) {
+      const aberto = !!grupoAberto[g.key], emSubAtiva = subs.some(x => x.id === currentPage);
+      html += `<div class="nav-item nav-group-toggle ${p.id === currentPage ? 'active' : emSubAtiva ? 'active-parent' : ''}" data-page="${p.id}">
+          ${icon(p.ico)}<span class="nav-group-label-text">${p.label}</span><span class="nav-caret ${aberto ? 'open' : ''}" data-group-toggle="${g.key}" role="button" aria-label="Mostrar mais opções de ${p.label}" title="Mostrar mais opções">${ICONS.chevDown}</span>
+        </div>
+        <div class="nav-submenu ${aberto ? 'open' : ''}" data-group-panel="${g.key}">${subs.map(subItem).join('')}</div>`;
+    } else if (GRUPOS_MENU.some(x => x.subs.includes(p.id) && ids.has(x.main))) {
+      return;  // aparece dentro do submenu do grupo
+    } else {
+      html += navItemHtml(p);
+    }
+  });
   nav.innerHTML = html;
   nav.querySelectorAll('.nav-item[data-page]').forEach(n => n.addEventListener('click', () => navigateTo(n.dataset.page)));
-  const groupToggle = nav.querySelector('[data-group-toggle="dashboards"]');
-  if (groupToggle) groupToggle.addEventListener('click', (e) => { e.stopPropagation(); dashboardGroupOpen = !dashboardGroupOpen; buildSidebar(); });
+  nav.querySelectorAll('[data-group-toggle]').forEach(t => t.addEventListener('click', (e) => { e.stopPropagation(); const k = t.dataset.groupToggle; grupoAberto[k] = !grupoAberto[k]; buildSidebar(); }));
 }
 function refreshShellForUser() {
   const u = DB.user;

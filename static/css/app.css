@@ -275,6 +275,8 @@ button{ font-family:inherit; }
 }
 .period-filter button.active{ background: var(--brand-navy); color:#fff; box-shadow:var(--shadow-card); }
 .period-filter button:hover:not(.active){ color:var(--text); }
+.period-custom{ display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-faint); }
+.period-custom .input{ padding:5px 8px; font-size:12px; width:auto; }
 
 .page{ padding:24px 28px 64px; max-width:1520px; }
 .page-hidden{ display:none; }
@@ -773,3 +775,25 @@ body:not(.perfil-admin) .scenario-radio{ pointer-events:none; cursor:default; op
 .pref-row:last-child{ border-bottom:none; }
 .pref-label{ flex:0 0 140px; color:var(--text-dim); }
 .pref-value{ font-weight:600; word-break:break-word; }
+
+/* Nº de Referência (Cliente/Fornecedor): campo + botão Adicionar e etiquetas removíveis */
+.ref-add{ display:flex; gap:8px; align-items:stretch; }
+.ref-add .input{ flex:1; min-width:0; }
+.ref-list{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.ref-chip{ display:inline-flex; align-items:center; gap:6px; background:var(--card-alt); border:1px solid var(--border); border-radius:999px; padding:4px 6px 4px 12px; font-size:12.5px; font-weight:600; color:var(--text); }
+.ref-chip button{ display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border:none; border-radius:50%; background:transparent; color:var(--text-faint); cursor:pointer; padding:0; }
+.ref-chip button svg{ width:12px; height:12px; }
+.ref-chip button:hover{ background:rgba(255,80,80,.18); color:#ff6b6b; }
+
+/* Acesso rápido (página Solicitações): cartões discretos por módulo */
+.quick-access{ margin:2px 0 6px; }
+.qa-title{ font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--text-faint); margin:0 0 8px; }
+.qa-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; }
+.qa-tile{ position:relative; background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:11px 12px 10px; cursor:pointer; transition:border-color .15s ease, transform .15s ease; }
+.qa-tile:hover, .qa-tile:focus-visible{ border-color:var(--c1); transform:translateY(-1px); outline:none; }
+.qa-tile > svg{ width:18px; height:18px; color:var(--c1); display:block; }
+.qa-name{ font-size:12.5px; font-weight:700; color:var(--text); margin-top:7px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.qa-count{ font-size:11.5px; color:var(--text-faint); margin-top:1px; }
+.qa-plus{ position:absolute; top:8px; right:8px; width:24px; height:24px; display:flex; align-items:center; justify-content:center; padding:0; border:1px solid var(--border); border-radius:7px; background:transparent; color:var(--text-dim); cursor:pointer; transition:.15s ease; }
+.qa-plus svg{ width:13px; height:13px; }
+.qa-plus:hover{ background:var(--c1); border-color:var(--c1); color:#fff; }

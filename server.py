@@ -105,6 +105,7 @@ PRAZO_DOC_FISCAL = {'grupo': 7, 'fornecedor': 3, 'reembolso': 1}
 MSG_BLOQUEIO = 'Atenção!!! Bloqueio devido a falta do envio do documento fiscal. Verifique seus lançamentos já aprovados'
 
 STATUS_LABEL = {
+    'fiscal': 'Aguardando Aprovação Fiscal',
     'aprovacao1': 'Aguardando Aprovação 1',
     'aprovacao2': 'Aguardando Aprovação 2',
     'rh': 'Aguardando RH 1',
@@ -114,9 +115,10 @@ STATUS_LABEL = {
     'reprovada': 'Reprovada',
     'encerrada': 'Encerrada',
 }
-STATUS_ABERTOS = ('aprovacao1', 'aprovacao2', 'rh', 'rh2', 'financeiro', 'alteracao')
+STATUS_ABERTOS = ('fiscal', 'fiscal', 'aprovacao1', 'aprovacao2', 'rh', 'rh2', 'financeiro', 'alteracao')
 ETAPA_RH = 4   # etapa do RH no histórico (só no módulo Freelancer; o Financeiro continua sendo a etapa 3)
 ETAPA_RH2 = 5  # acompanhamento do Freelancer recorrente (RH 2), no lugar do Financeiro
+ETAPA_FISCAL = 6  # Aprovação Fiscal (só no módulo Reembolso): o Financeiro analisa antes da Aprovação 1
 DIAS_AVISO_TERMINO = 7
 MODALIDADES = {'presencial': 'Presencial', 'home_office': 'Home office', 'hibrido': 'Híbrido'}
 MAX_DIAS_FREELA = 31
@@ -787,7 +789,7 @@ def impacto_rateio(conn, b, novo):
 def estatisticas_ano(conn, ano):
     return {'ano': ano, 'orcamentos': conn.execute('SELECT COUNT(*) FROM budgets WHERE ano=?', (ano,)).fetchone()[0],
             'lancamentos': conn.execute('SELECT COUNT(*) FROM launches WHERE ano=?', (ano,)).fetchone()[0],
-            'solicitacoesAbertas': conn.execute("SELECT COUNT(*) FROM solicitacoes WHERE status IN ('aprovacao1','aprovacao2','rh','rh2','financeiro','alteracao') AND substr(data_pagamento,1,4)=?", (str(ano),)).fetchone()[0]}
+            'solicitacoesAbertas': conn.execute("SELECT COUNT(*) FROM solicitacoes WHERE status IN ('fiscal','aprovacao1','aprovacao2','rh','rh2','financeiro','alteracao') AND substr(data_pagamento,1,4)=?", (str(ano),)).fetchone()[0]}
 
 
 def pendencias_empresa(conn):
@@ -1174,7 +1176,7 @@ def gerar_recibo_pdf(conn, sol):
     if tipo == 'fornecedor':
         campo(L, y, 'Título:', d.get('titulo')); y -= 15
         campo(L, y, 'Solicitante:', d.get('solicitante')); campo(col2, y, 'Departamento:', dep_nome, 90); y -= 15
-        campo(L, y, 'E-mail:', sol['email']); campo(col2, y, 'Nº da OC/PI:', d.get('numeroOcPi'), 90); y -= 15
+        campo(L, y, 'E-mail:', sol['email']); campo(col2, y, 'Nº de Referência:', d.get('numeroOcPi'), 90); y -= 15
         campo(L, y, 'Fornecedor:', d.get('fornecedor')); campo(col2, y, 'Cliente:', d.get('cliente'), 90); y -= 15
         campo(L, y, 'Empresa:', d.get('empresa')); y -= 15
     elif tipo == 'reembolso':
@@ -1222,7 +1224,7 @@ def gerar_recibo_pdf(conn, sol):
     nomes = {'criada': 'Solicitação enviada', 'reenviada': 'Solicitação reenviada', 'aprovada': 'Aprovado', 'encerrada': 'Pagamento autorizado', 'ajustada': 'Valor/término ajustado'}
     for h in hist:
         if h['acao'] in nomes:
-            rotulo = {ETAPA_RH: 'RH 1', ETAPA_RH2: 'RH 2', 3: 'Financeiro'}.get(h['etapa'], 'Aprovação %s' % h['etapa'])
+            rotulo = {ETAPA_RH: 'RH 1', ETAPA_RH2: 'RH 2', ETAPA_FISCAL: 'Aprovação Fiscal', 3: 'Financeiro'}.get(h['etapa'], 'Aprovação %s' % h['etapa'])
             et = (' — ' + rotulo) if h['acao'] in ('aprovada', 'encerrada', 'ajustada') and h['etapa'] else ''
             ops.append(('text', L, y, 9.5, False, '%s%s: %s em %s' % (nomes[h['acao']], et, h['user_nome'] or '', fmt_data_hora(h['data']))))
             y -= 13
@@ -1466,7 +1468,7 @@ def _orcamento(conn, tipo, d, valor, dep, excluir_id):
         return [{'tipo': 'orcamento', 'estouro': False, 'mensagem': 'Não há orçamento de %d cadastrado para este departamento: não foi possível comparar o valor.' % ano}]
     cats = pj(b['categorias'], [])
     lancs = [pj(r['dados'], {}) for r in conn.execute('SELECT dados FROM launches WHERE departamento_id=? AND ano=?', (dep, ano))]
-    abertas = conn.execute("SELECT id,tipo,valor,dados FROM solicitacoes WHERE departamento_id=? AND status IN ('aprovacao1','aprovacao2','rh','rh2','financeiro','alteracao') AND substr(data_pagamento,1,4)=? AND id<>?",
+    abertas = conn.execute("SELECT id,tipo,valor,dados FROM solicitacoes WHERE departamento_id=? AND status IN ('fiscal','aprovacao1','aprovacao2','rh','rh2','financeiro','alteracao') AND substr(data_pagamento,1,4)=? AND id<>?",
                            (dep, str(ano), excluir_id or 0)).fetchall()
     out = []
     total = sum(_aprovado_cat(c) for c in cats)
@@ -1504,7 +1506,7 @@ ROLES_RELATORIOS = ('admin', 'diretor', 'financeiro', 'gestor', 'rh')  # colabor
 LIMITE_LINHAS_TELA = 1000
 LIMITE_LINHAS_EXPORT = 20000
 TIPO_LANC_HIST = 'lancamento_historico'
-STATUS_REL = {'concluido': ('encerrada',), 'reprovado': ('reprovada',), 'em_andamento': ('aprovacao1', 'aprovacao2', 'rh', 'rh2', 'financeiro'), 'alteracao': ('alteracao',)}
+STATUS_REL = {'concluido': ('encerrada',), 'reprovado': ('reprovada',), 'em_andamento': ('fiscal', 'aprovacao1', 'aprovacao2', 'rh', 'rh2', 'financeiro'), 'alteracao': ('alteracao',)}
 STATUS_REL_NOMES = [('todos', 'Todos'), ('concluido', 'Pedido concluído'), ('reprovado', 'Pedido reprovado'),
                     ('em_andamento', 'Em andamento (aguardando aprovação)'), ('alteracao', 'Devolvido para alteração')]
 PERIODOS_REL = [('mes_atual', 'Mês atual'), ('mes_anterior', 'Mês anterior'), ('ultimos_30', 'Últimos 30 dias'), ('ano_atual', 'Ano atual'), ('personalizado', 'Personalizado')]
@@ -1681,7 +1683,7 @@ def _rel_orcado_realizado(conn, user, f):
         cats = pj(b['categorias'], [])
         lancs = [pj(r['dados'], {}) for r in conn.execute('SELECT dados FROM launches WHERE departamento_id=? AND ano=?', (dep, ano))]
         abertas = [(r['tipo'], pj(r['dados'], {}), r['valor'] or 0) for r in conn.execute(
-            "SELECT tipo,dados,valor FROM solicitacoes WHERE departamento_id=? AND status IN ('aprovacao1','aprovacao2','rh','rh2','financeiro','alteracao') AND substr(data_pagamento,1,4)=?", (dep, str(ano)))]
+            "SELECT tipo,dados,valor FROM solicitacoes WHERE departamento_id=? AND status IN ('fiscal','aprovacao1','aprovacao2','rh','rh2','financeiro','alteracao') AND substr(data_pagamento,1,4)=?", (dep, str(ano)))]
         usados = set()
         for c in cats:
             vinc = set(c.get('categoriasLancamento') or [])
@@ -1796,7 +1798,7 @@ def _rel_aprovacoes(conn, user, f):
         parado = dias(ts(ev[-1]['data']) if ev else criada, agora) if aberto else None
         if parada_min and (parado is None or parado < parada_min):
             continue
-        atual = {'aprovacao1': users.get(r['aprovador1_id']), 'aprovacao2': users.get(r['aprovador2_id']), 'rh': 'RH 1', 'rh2': 'RH 2', 'financeiro': 'Financeiro', 'alteracao': r['solicitante_nome']}.get(r['status'], '')
+        atual = {'fiscal': 'Financeiro (fiscal)', 'aprovacao1': users.get(r['aprovador1_id']), 'aprovacao2': users.get(r['aprovador2_id']), 'rh': 'RH 1', 'rh2': 'RH 2', 'financeiro': 'Financeiro', 'alteracao': r['solicitante_nome']}.get(r['status'], '')
         d = pj(r['dados'], {})
         linhas.append({'numero': r['numero'], 'titulo': titulo_solicitacao(r['tipo'], d), 'modulo': TIPOS_SOLICITACAO.get(r['tipo'], r['tipo']), 'departamento': nomes_dep.get(r['departamento_id'], '—'),
                        'solicitante': r['solicitante_nome'] or '', 'data': (r['criado_em'] or '')[:10], 'status': STATUS_LABEL.get(r['status'], r['status']), 'aprovadorAtual': atual or '',
@@ -2526,6 +2528,16 @@ def validar_solicitacao(conn, user, body):
     if tipo not in TIPOS_SOLICITACAO:
         raise ApiError(400, 'Tipo de solicitação inválido.')
     d = body.get('dados') or {}
+    if tipo == 'fornecedor' and isinstance(d.get('referencias'), list):  # Nº de Referência: vários (OC, PI, PC, PO, OP, OS…); numeroOcPi guarda a lista em texto
+        refs = []
+        for x in d['referencias']:
+            x = re.sub(r'\s+', ' ', str(x or '')).strip()[:60]
+            if x and x not in refs:
+                refs.append(x)
+        if len(refs) > 30:
+            raise ApiError(400, 'Informe no máximo 30 números de referência.')
+        d['referencias'] = refs
+        d['numeroOcPi'] = ', '.join(refs)
     faltando = [c for c in CAMPOS_OBRIGATORIOS[tipo] if d.get(c) in (None, '', [])]
     if tipo == 'reembolso' and not (body.get('anexos') or []):
         faltando.append('reciboNotaFiscal')
@@ -3740,7 +3752,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 cur = conn.execute('''INSERT INTO solicitacoes(numero,tipo,status,retorno_para,solicitante_id,solicitante_nome,email,departamento_id,valor,data_pagamento,dados,anexos,aprovador1_id,aprovador2_id,criado_em,atualizado_em)
                                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
-                                   (numero, tipo, 'rh' if tipo == 'rescisao' else 'aprovacao1', None, user['id'], nome_sol, email, dep, valor, d.get('dataPagamento'), j(dados_cifrar(d)), j(anexos), d1, d2, now_iso(), now_iso()))
+                                   (numero, tipo, {'rescisao': 'rh', 'reembolso': 'fiscal'}.get(tipo, 'aprovacao1'), None, user['id'], nome_sol, email, dep, valor, d.get('dataPagamento'), j(dados_cifrar(d)), j(anexos), d1, d2, now_iso(), now_iso()))
                 break
             except sqlite3.IntegrityError:
                 conn.rollback()
@@ -3750,12 +3762,14 @@ class Handler(BaseHTTPRequestHandler):
         if nf_doc:
             conn.execute('UPDATE solicitacoes SET doc_fiscal=? WHERE id=?', (j(nf_doc), sid))
         conn.execute('UPDATE solicitacoes SET alertas=? WHERE id=?', (j(alertas), sid))
-        add_hist(conn, sid, user, 'criada', ETAPA_RH if tipo == 'rescisao' else 1, None, {'alertas': [a['mensagem'] for a in alertas]} if alertas else None)
+        add_hist(conn, sid, user, 'criada', {'rescisao': ETAPA_RH, 'reembolso': ETAPA_FISCAL}.get(tipo, 1), None, {'alertas': [a['mensagem'] for a in alertas]} if alertas else None)
         conn.commit()
         self.audit(conn, user, 'solicitacao.criada', numero, {'tipo': tipo, 'valor': valor, 'departamento': dep,
                                                               'duplicidadeConfirmada': any(a['tipo'] == 'duplicidade' for a in alertas), 'estouroOrcamento': any(a.get('estouro') for a in alertas)})
         if tipo == 'rescisao':
             self.notificar_rh(conn, sid)
+        elif tipo == 'reembolso':
+            self.notificar_fiscal(conn, sid)
         else:
             self.notificar_aprovador(conn, sid, d1, 1)
         return self.send_json({'solicitacao': sol_out(conn, conn.execute('SELECT * FROM solicitacoes WHERE id=?', (sid,)).fetchone(), True)}, 201)
@@ -3780,18 +3794,22 @@ class Handler(BaseHTTPRequestHandler):
         if CONFIG.get('reenvio_retorna_para_aprovacao1', True):
             novo_status = 'aprovacao1'
         else:
-            novo_status = {2: 'aprovacao2', ETAPA_RH: 'rh'}.get(r['retorno_para'], 'aprovacao1')
+            novo_status = {2: 'aprovacao2', ETAPA_RH: 'rh', ETAPA_FISCAL: 'fiscal'}.get(r['retorno_para'], 'aprovacao1')
         if tipo == 'rescisao' and novo_status == 'aprovacao1':  # o fluxo da Rescisão começa no RH 1
             novo_status = 'rh'
+        if tipo == 'reembolso' and novo_status == 'aprovacao1':  # o fluxo do Reembolso começa na Aprovação Fiscal
+            novo_status = 'fiscal'
         conn.execute('UPDATE solicitacoes SET status=?, dados=?, anexos=?, valor=?, data_pagamento=?, email=?, departamento_id=?, solicitante_nome=?, atualizado_em=?, motivo_ultimo=NULL WHERE id=?',
                      (novo_status, j(dados_cifrar(d)), j(anexos), valor, d.get('dataPagamento'), email, dep, d.get('solicitante') or d.get('nome') or r['solicitante_nome'], now_iso(), r['id']))
         conn.execute('UPDATE solicitacoes SET alertas=? WHERE id=?', (j(alertas), r['id']))
         add_hist(conn, r['id'], user, 'editada', None, body.get('comentario') or None, diff)
-        add_hist(conn, r['id'], user, 'reenviada', {'aprovacao1': 1, 'aprovacao2': 2, 'rh': ETAPA_RH}[novo_status])
+        add_hist(conn, r['id'], user, 'reenviada', {'aprovacao1': 1, 'aprovacao2': 2, 'rh': ETAPA_RH, 'fiscal': ETAPA_FISCAL}[novo_status])
         conn.commit()
         self.audit(conn, user, 'solicitacao.editada', r['numero'], {'campos': sorted(diff), 'valorDe': r['valor'], 'valorPara': valor})
         if novo_status == 'rh':
             self.notificar_rh(conn, r['id'])
+        elif novo_status == 'fiscal':
+            self.notificar_fiscal(conn, r['id'])
         else:
             self.notificar_aprovador(conn, r['id'], r['aprovador1_id'] if novo_status == 'aprovacao1' else r['aprovador2_id'], 1 if novo_status == 'aprovacao1' else 2)
         return self.send_json({'solicitacao': sol_out(conn, conn.execute('SELECT * FROM solicitacoes WHERE id=?', (r['id'],)).fetchone(), True)})
@@ -3822,7 +3840,10 @@ class Handler(BaseHTTPRequestHandler):
 
         # o Administrador age em qualquer etapa, inclusive nas solicitações criadas por ele mesmo
         adm = user['perfil'] == 'admin'
-        if status == 'aprovacao1':
+        if status == 'fiscal':
+            exige(adm or user['perfil'] == 'financeiro', 'A Aprovação Fiscal cabe ao Financeiro.')
+            etapa = ETAPA_FISCAL
+        elif status == 'aprovacao1':
             exige(adm or user['id'] == r['aprovador1_id'], 'Esta etapa cabe ao(à) Diretor(a) 1 desta solicitação.')
             etapa = 1
         elif status == 'aprovacao2':
@@ -3864,8 +3885,10 @@ class Handler(BaseHTTPRequestHandler):
         para = r['email'] or (solic['email'] if solic else None)
         resumo = self.resumo_email(conn, r)
 
-        if acao == 'aprovar' and etapa in (1, 2, ETAPA_RH):
-            if etapa == 1:
+        if acao == 'aprovar' and etapa in (1, 2, ETAPA_RH, ETAPA_FISCAL):
+            if etapa == ETAPA_FISCAL:
+                novo = 'aprovacao1'   # Reembolso: Aprovação Fiscal (Financeiro) → Aprovação 1 → Aprovação 2 → Financeiro
+            elif etapa == 1:
                 novo = 'aprovacao2'
             elif etapa == 2:
                 novo = 'rh' if r['tipo'] == 'freelancer' else 'financeiro'
@@ -3944,7 +3967,7 @@ class Handler(BaseHTTPRequestHandler):
                          'Atenciosamente\nNexarPay') % (r['numero'], resumo, PRAZO_DOC_FISCAL.get(r['tipo'], 3), fmt_data(prazo), doc)
             if para:
                 enviar_email(para, 'NexarPay — Pagamento autorizado — Recibo %s' % r['numero'], corpo, os.path.join(RECIBO_DIR, recibo) if recibo else None)
-        elif acao == 'alterar' and etapa in (1, 2, ETAPA_RH):
+        elif acao == 'alterar' and etapa in (1, 2, ETAPA_RH, ETAPA_FISCAL):
             conn.execute('UPDATE solicitacoes SET status=?, retorno_para=?, atualizado_em=?, motivo_ultimo=? WHERE id=?', ('alteracao', etapa, now_iso(), just, r['id']))
             add_hist(conn, r['id'], user, 'alteracao_solicitada', etapa, just)
             conn.commit()
@@ -4129,6 +4152,14 @@ class Handler(BaseHTTPRequestHandler):
         for u in conn.execute("SELECT * FROM users WHERE perfil='rh' AND rh1=1 AND ativo=1"):
             enviar_email(u['email'], 'NexarPay — Solicitação %s aguarda o RH 1' % r['numero'],
                          'Olá, %s.\n\n%s\n\n%s\n\nAcesse: %s\n\nAtenciosamente\nNexarPay' % (u['nome'], texto, self.resumo_email(conn, r), CONFIG.get('url_base')))
+
+    def notificar_fiscal(self, conn, sid):
+        r = conn.execute('SELECT * FROM solicitacoes WHERE id=?', (sid,)).fetchone()
+        if not r:
+            return
+        for u in conn.execute("SELECT * FROM users WHERE perfil='financeiro' AND ativo=1"):
+            enviar_email(u['email'], 'NexarPay — Reembolso %s aguarda a Aprovação Fiscal' % r['numero'],
+                         'Olá, %s.\n\nHá uma solicitação de Reembolso aguardando a sua Aprovação Fiscal: confira o recibo/nota fiscal e aprove, reprove ou solicite alteração.\n\n%s\n\nAcesse: %s\n\nAtenciosamente\nNexarPay' % (u['nome'], self.resumo_email(conn, r), CONFIG.get('url_base')))
 
     def notificar_acompanhamento(self, conn, sid, texto):
         r = conn.execute('SELECT * FROM solicitacoes WHERE id=?', (sid,)).fetchone()

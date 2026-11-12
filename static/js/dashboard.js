@@ -1,7 +1,8 @@
 /* ===================== NexarPay — Dashboards: departamento (Gestor/Admin) e Gerencial (Diretoria/Financeiro/Admin) ===================== */
 
-const dashState = { period: 'all', ano: null, dep: null };
-const gerState = { period: 'all', ano: null, dep: '' };
+// período: 'ano' (ano atual/selecionado), 'mes' (mês atual) ou 'custom|AAAA-MM-DD|AAAA-MM-DD' (intervalo livre)
+const dashState = { period: 'ano', ano: null, dep: null };
+const gerState = { period: 'ano', ano: null, dep: '' };
 let chartRefs = {};
 function destroyChart(key) { if (chartRefs[key]) { chartRefs[key].destroy(); delete chartRefs[key]; } }
 function destroyAllCharts() { Object.keys(chartRefs).forEach(destroyChart); }
@@ -9,7 +10,7 @@ function destroyAllCharts() { Object.keys(chartRefs).forEach(destroyChart); }
 /* ---------- cálculos ---------- */
 function getBudget(ano, depId) { return DB.budgets.find(b => b.ano === ano && b.departamentoId === depId); }
 function budgetYears() { return Array.from(new Set(DB.budgets.map(b => b.ano))).sort((a, b) => b - a); }
-function availableYears() { const ys = new Set(DB.launches.map(l => l.ano).filter(y => y && y > 0)); budgetYears().forEach(y => ys.add(y)); if (!ys.size) ys.add(new Date().getFullYear()); return Array.from(ys).sort((a, b) => b - a); }
+function availableYears() { const ys = new Set(DB.launches.map(l => l.ano).filter(y => y && y > 0)); budgetYears().forEach(y => ys.add(y)); ys.add(new Date().getFullYear()); return Array.from(ys).sort((a, b) => b - a); }
 function approvedTotalForCategory(cat) { let t = 0; (cat.linhas || []).forEach(l => (l.cenarios || []).forEach(c => { if (c.aprovado) t += Number(c.valor) || 0; })); return t; }
 function approvedRateioForCategory(cat, rateio) { const total = approvedTotalForCategory(cat); rateio = rateio || {}; const out = {}; COMPANY_KEYS.forEach(k => out[k] = total * (rateio[k] || 0)); return out; }
 function totalBudgetApproved(b) { return b ? b.categorias.reduce((s, c) => s + approvedTotalForCategory(c), 0) : 0; }
@@ -28,26 +29,46 @@ function alocarLancamento(l) {
   return [{ key: l.empresaId || 'SEM_EMPRESA', valor: v }];
 }
 function gastoPorEmpresa(list) { const m = {}; list.forEach(l => alocarLancamento(l).forEach(a => { m[a.key] = (m[a.key] || 0) + a.valor; })); return m; }
-// Recorte de período DENTRO do ano fiscal (janela termina hoje ou em 31/12 de anos passados)
+// Recorte de período: ano (do ano fiscal escolhido), mês atual ou intervalo personalizado (pela data da compra/pagamento)
+function hojeISO() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+function periodParts(p) { if (typeof p === 'string' && p.startsWith('custom|')) { const [, ini, fim] = p.split('|'); return { tipo: 'custom', ini, fim }; } return { tipo: p === 'mes' ? 'mes' : 'ano' }; }
 function launchesInPeriod(period, ano, depIds) {
-  let list = DB.launches.filter(l => (!ano || l.ano === ano) && (!depIds || depIds.includes(l.departamentoId)));
-  if (period === 'all') return list;
-  const now = new Date();
-  const ref = (ano && ano < now.getFullYear()) ? new Date(ano, 11, 31) : now;
-  const months = period === '6m' ? 6 : 12;
-  const cutoff = new Date(ref.getFullYear(), ref.getMonth() - months, ref.getDate());
-  return list.filter(l => l.dataCompra && new Date(l.dataCompra + 'T00:00:00') >= cutoff);
+  const base = DB.launches.filter(l => !depIds || depIds.includes(l.departamentoId));
+  const pp = periodParts(period);
+  if (pp.tipo === 'custom') return base.filter(l => l.dataCompra && l.dataCompra >= pp.ini && l.dataCompra <= pp.fim);
+  if (pp.tipo === 'mes') { const ym = hojeISO().slice(0, 7); return base.filter(l => (l.dataCompra || '').slice(0, 7) === ym); }
+  return base.filter(l => !ano || l.ano === ano);
 }
 const somaCusto = (arr) => arr.reduce((s, l) => s + (Number(l.custoTotal) || 0), 0);
-function periodLabel(p) { return p === '6m' ? 'Últimos 6 meses' : p === '12m' ? 'Últimos 12 meses' : 'Ano fiscal inteiro'; }
+function periodLabel(p) {
+  const pp = periodParts(p), br = (iso) => iso ? iso.split('-').reverse().join('/') : '—';
+  return pp.tipo === 'mes' ? 'Mês atual' : pp.tipo === 'custom' ? `${br(pp.ini)} a ${br(pp.fim)}` : 'Ano fiscal inteiro';
+}
 function monthLabel(ym) { const [y, m] = ym.split('-'); return ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'][Number(m) - 1] + '/' + y.slice(2); }
 function trendFor(list) { const by = {}; list.forEach(l => { if (!l.dataCompra) return; const k = l.dataCompra.slice(0, 7); by[k] = (by[k] || 0) + (Number(l.custoTotal) || 0); }); const keys = Object.keys(by).sort(); return { labels: keys.map(monthLabel), values: keys.map(k => by[k]) }; }
 function topFornecedores(list, n = 6) { const m = {}; list.forEach(l => { m[l.fornecedor || '—'] = (m[l.fornecedor || '—'] || 0) + (Number(l.custoTotal) || 0); }); return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, n); }
-function periodFilterHtml(state, onChange) {
-  return `<div class="period-filter">${[['6m', '6 meses'], ['12m', '12 meses'], ['all', 'Ano inteiro']].map(([k, l]) => `<button data-p="${k}" class="${state.period === k ? 'active' : ''}">${l}</button>`).join('')}</div>`;
+function periodFilterHtml(state) {
+  const pp = periodParts(state.period), anoAtual = new Date().getFullYear();
+  const btn = (k, l, on) => `<button data-p="${k}" class="${on ? 'active' : ''}">${l}</button>`;
+  let h = `<div class="period-filter">${btn('mes', 'Mês atual', pp.tipo === 'mes')}${btn('ano', 'Ano atual', pp.tipo === 'ano' && state.ano === anoAtual)}${btn('custom', 'Personalizado', pp.tipo === 'custom')}</div>`;
+  if (pp.tipo === 'custom') h += `<div class="period-custom"><input type="date" class="input" id="perIni" value="${pp.ini || ''}" aria-label="Data inicial"><span>até</span><input type="date" class="input" id="perFim" value="${pp.fim || ''}" aria-label="Data final"></div>`;
+  return h;
 }
 function wirePeriodFilter(container, state, rerender) {
-  container.querySelectorAll('.period-filter button').forEach(b => b.addEventListener('click', () => { state.period = b.dataset.p; rerender(); }));
+  const anoAtual = new Date().getFullYear();
+  container.querySelectorAll('.period-filter button').forEach(b => b.addEventListener('click', () => {
+    const k = b.dataset.p;
+    if (k === 'custom') { if (periodParts(state.period).tipo === 'custom') return; state.period = `custom|${anoAtual}-01-01|${hojeISO()}`; }
+    else { state.period = k; state.ano = anoAtual; }
+    rerender();
+  }));
+  const ini = container.querySelector('#perIni'), fim = container.querySelector('#perFim');
+  const aplicar = () => {
+    if (!ini.value || !fim.value) return;
+    if (ini.value > fim.value) { toast('A data inicial não pode ser maior que a final.', 'error'); return; }
+    state.period = `custom|${ini.value}|${fim.value}`; rerender();
+  };
+  if (ini && fim) { ini.addEventListener('change', aplicar); fim.addEventListener('change', aplicar); }
 }
 // linhas por categoria orçamentária de um departamento/ano
 function catRowsFor(b, ano, depId) {
@@ -58,7 +79,7 @@ function catRowsFor(b, ano, depId) {
     return { id: c.id, nome: c.nome, orcado, gasto, saldo: orcado - gasto, pct: orcado ? gasto / orcado * 100 : (gasto > 0 ? 999 : 0) };
   });
 }
-function solicitacoesAbertasValor(depId, ano) { return DB.solicitacoes.filter(s => ['aprovacao1', 'aprovacao2', 'rh', 'rh2', 'financeiro', 'alteracao'].includes(s.status) && (!depId || s.departamentoId === depId) && (!ano || (s.dataPagamento || s.criadoEm || '').slice(0, 4) == ano)).reduce((t, s) => t + (Number(s.valor) || 0), 0); }
+function solicitacoesAbertasValor(depId, ano) { return DB.solicitacoes.filter(s => ['fiscal', 'aprovacao1', 'aprovacao2', 'rh', 'rh2', 'financeiro', 'alteracao'].includes(s.status) && (!depId || s.departamentoId === depId) && (!ano || (s.dataPagamento || s.criadoEm || '').slice(0, 4) == ano)).reduce((t, s) => t + (Number(s.valor) || 0), 0); }
 
 // Consolidado de todos os departamentos num ano/período — usado pelo Dashboard Gerencial e pelo Dashboard (TV).
 function computeConsolidado(deps, ano, period) {
@@ -115,7 +136,7 @@ async function renderDashboard() {
     ${deptDashboardBody(depId, ano, period, b, 'dash')}
     ${perfil() === 'rh' ? freelancerDashHtml(ano) : ''}`;
   document.getElementById('dashDep').addEventListener('change', e => { dashState.dep = e.target.value; renderDashboard(); });
-  document.getElementById('dashAno').addEventListener('change', e => { dashState.ano = Number(e.target.value); renderDashboard(); });
+  document.getElementById('dashAno').addEventListener('change', e => { dashState.ano = Number(e.target.value); if (dashState.period === 'mes') dashState.period = 'ano'; renderDashboard(); });
   paintDeptCharts(depId, ano, period, b, 'dash', el);
   el.querySelectorAll('[data-open-sol]').forEach(tr => tr.addEventListener('click', () => openSolicitacao(Number(tr.dataset.openSol))));
 }
@@ -125,7 +146,7 @@ function freelancerDashHtml(ano) {
   const fl = DB.solicitacoes.filter(s => s.tipo === 'freelancer' && String(s.dataPagamento || s.criadoEm || '').slice(0, 4) == ano);
   const hoje = todayISO();
   const soma = (a) => a.reduce((t, s) => t + (Number(s.valor) || 0), 0);
-  const abertas = fl.filter(s => ['aprovacao1', 'aprovacao2', 'rh', 'rh2', 'financeiro', 'alteracao'].includes(s.status));
+  const abertas = fl.filter(s => ['fiscal', 'aprovacao1', 'aprovacao2', 'rh', 'rh2', 'financeiro', 'alteracao'].includes(s.status));
   const enc = fl.filter(s => s.status === 'encerrada');
   const aguardoRh = fl.filter(s => s.status === 'rh');
   const semNf = enc.filter(s => !s.docFiscal);
@@ -293,14 +314,14 @@ async function renderGerencial() {
 }
 function wireGer(el) {
   document.getElementById('gerDep').addEventListener('change', e => { gerState.dep = e.target.value; renderGerencial(); });
-  document.getElementById('gerAno').addEventListener('change', e => { gerState.ano = Number(e.target.value); renderGerencial(); });
+  document.getElementById('gerAno').addEventListener('change', e => { gerState.ano = Number(e.target.value); if (gerState.period === 'mes') gerState.period = 'ano'; renderGerencial(); });
 }
 
 /* ---------- DASHBOARD (TV) — perfil "tv": somente leitura, dashboard customizável, atualização automática ----------
    Roda hoje no mesmo servidor local do NexarPay (sem nuvem). "Tempo real" aqui = a página busca os dados mais
    recentes do servidor a cada N segundos (padrão 30s, configurável) e redesenha — funciona em qualquer navegador
    apontando para o servidor, inclusive numa TV, sem precisar de infraestrutura adicional. */
-const tvState = { period: 'all', ano: null, dep: '' };
+const tvState = { period: 'ano', ano: null, dep: '' };
 let tvPollTimer = null;
 
 const WIDGET_CATALOG = [
@@ -343,7 +364,7 @@ async function renderDashboardTV() {
     const b = getBudget(ano, tvState.dep);
     el.innerHTML = header + deptDashboardBody(tvState.dep, ano, period, b, 'tv') +
       `<div style="margin-top:14px;"><button class="btn btn-sm" id="tvBackBtn">${icon('x')}Voltar à visão consolidada</button></div>`;
-    document.getElementById('tvAno').addEventListener('change', e => { tvState.ano = Number(e.target.value); renderDashboardTV(); });
+    document.getElementById('tvAno').addEventListener('change', e => { tvState.ano = Number(e.target.value); if (tvState.period === 'mes') tvState.period = 'ano'; renderDashboardTV(); });
     document.getElementById('tvBackBtn').addEventListener('click', () => { tvState.dep = ''; renderDashboardTV(); });
     paintDeptCharts(tvState.dep, ano, period, b, 'tv', el);
     startTvPolling(cfg.intervaloSegundos);
@@ -353,7 +374,7 @@ async function renderDashboardTV() {
   const c = computeConsolidado(deps, ano, period);
   el.innerHTML = header + cfg.widgets.map(id => tvWidgetHtml(id, { c, ano, period })).join('') +
     `<div class="footer-note">Dashboard (TV) atualizado automaticamente · NexarPay — Grupo Gpac</div>`;
-  document.getElementById('tvAno').addEventListener('change', e => { tvState.ano = Number(e.target.value); renderDashboardTV(); });
+  document.getElementById('tvAno').addEventListener('change', e => { tvState.ano = Number(e.target.value); if (tvState.period === 'mes') tvState.period = 'ano'; renderDashboardTV(); });
   el.querySelectorAll('[data-dep]').forEach(card => card.addEventListener('click', () => { tvState.dep = card.dataset.dep; renderDashboardTV(); }));
   try {
     if (typeof Chart === 'undefined') throw new Error('Chart.js indisponível');
