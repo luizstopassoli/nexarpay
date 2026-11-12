@@ -786,8 +786,8 @@ body:not(.perfil-admin) .scenario-radio{ pointer-events:none; cursor:default; op
 .ref-chip button:hover{ background:rgba(255,80,80,.18); color:#ff6b6b; }
 
 /* Acesso rápido (página Solicitações): cartões discretos por módulo */
-.quick-access{ margin:2px 0 6px; }
-.qa-title{ font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--text-faint); margin:0 0 8px; }
+.quick-access{ margin:26px 0; }  /* mesmo respiro entre blocos da página (.sol-block) */
+.quick-access .section-title-row{ margin-top:0; }
 .qa-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; }
 .qa-tile{ position:relative; background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:11px 12px 10px; cursor:pointer; transition:border-color .15s ease, transform .15s ease; }
 .qa-tile:hover, .qa-tile:focus-visible{ border-color:var(--c1); transform:translateY(-1px); outline:none; }

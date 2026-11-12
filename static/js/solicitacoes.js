@@ -55,7 +55,7 @@ function acessoRapidoHtml() {
       ${moduloPodeCriar(m.tipo) ? `<button type="button" class="qa-plus" data-qa-new="${m.tipo}" aria-label="Nova solicitação de ${escapeHtml(m.label)}" title="Nova solicitação de ${escapeHtml(m.label)}">${ICONS.plus}</button>` : ''}
       ${icon(m.ico)}<div class="qa-name">${escapeHtml(m.label)}</div><div class="qa-count">${abertas ? abertas + ' em aberto' : 'nenhuma em aberto'}</div></div>`;
   }).join('');
-  return tiles ? `<div class="quick-access anim-in"><div class="qa-title">Acesso rápido</div><div class="qa-grid">${tiles}</div></div>` : '';
+  return tiles ? `<div class="quick-access anim-in"><div class="section-title-row"><h2>${icon('zap')} Acesso Rápido</h2></div><div class="qa-grid">${tiles}</div></div>` : '';
 }
 
 function paintSolicitacoes(pageId) {
