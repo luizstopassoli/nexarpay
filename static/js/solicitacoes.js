@@ -99,6 +99,8 @@ function paintSolicitacoes(pageId) {
   const st = solStateDe(pageId);
   const resumo = (modulo || p === 'admin' || p === 'diretor' || p === 'financeiro') ? resumoGeral(all, st, !!modulo) : '';
   const podeNova = !modulo || moduloPodeCriar(tipo);
+  const view = solView(), scrollKb = (el.querySelector('.kb-board') || {}).scrollLeft || 0;  // preserva a rolagem do quadro nas atualizações automáticas
+  const repaint = () => paintSolicitacoes(pageId);
 
   el.innerHTML = `
     <div class="sol-hero anim-in">
@@ -111,9 +113,9 @@ function paintSolicitacoes(pageId) {
     ${mostraFrl && tf.bloqueado ? `<div class="alert-box">${icon('alert')}<div><strong>${escapeHtml(tf.mensagem || '')}</strong><div style="margin-top:4px;">${(tf.vencidas || []).map(v => `<a href="#" data-open-sol="${v.id}" style="color:inherit;font-weight:700;">${escapeHtml(v.numero)}</a> (${escapeHtml(v.nome || '')}, término ${fmtDate(v.dataFim)})`).join(' · ')}</div></div></div>` : mostraFrl && (tf.pendentes || []).length ? `<div class="alert-box warn">${icon('fileText')}<div><strong>Freelancer: Nota Fiscal pendente</strong> em ${(tf.pendentes || []).map(v => `<a href="#" data-open-sol="${v.id}" style="color:inherit;font-weight:700;">${escapeHtml(v.numero)}</a> (até ${fmtDate(v.dataFim)})`).join(', ')}. Anexe a NF até o fim da contratação para não ficar bloqueado(a) de novas solicitações de Freelancer.</div></div>` : ''}
     <div class="grid ${kpis.length === 4 ? 'grid-4' : 'grid-3'} anim-in">${kpis.join('')}</div>
     ${modulo ? '' : acessoRapidoHtml()}
-    ${blocos.join('')}
-    ${resumo}
+    ${view === 'kanban' ? kanbanHtml(all, st, modulo) : `<div class="vw-bar">${vwToggleHtml('lista')}</div>${blocos.join('')}${resumo}`}
   `;
+  const kbBoard = el.querySelector('.kb-board'); if (kbBoard) kbBoard.scrollLeft = scrollKb;
 
   el.querySelectorAll('[data-qa]').forEach(t => {
     const abrir = () => navigateTo(t.dataset.qa);
@@ -128,7 +130,97 @@ function paintSolicitacoes(pageId) {
     openTipoSolicitacao();
   });
   el.querySelectorAll('[data-open-sol]').forEach(a => a.addEventListener('click', (e) => { e.preventDefault(); openSolicitacao(Number(a.dataset.openSol)); }));
-  wireResumo(el, all, st, !!modulo);
+  wireVista(el, repaint);
+  if (view === 'kanban') wireKanban(el, all, st, modulo, repaint); else wireResumo(el, all, st, !!modulo);
+}
+
+/* ---------- visualização Kanban (somente leitura: os cartões abrem o detalhe; aprovar/alterar/reprovar continuam lá) ---------- */
+function solView() { try { return localStorage.getItem('nexarpay.solView') === 'kanban' ? 'kanban' : 'lista'; } catch (e) { return 'lista'; } }
+function setSolView(v) { try { localStorage.setItem('nexarpay.solView', v); } catch (e) { /* sem armazenamento: vale só nesta sessão */ } }
+const KB_ROTULO = { fiscal: 'Aprovação Fiscal', aprovacao1: 'Aprovação 1', aprovacao2: 'Aprovação 2', rh: 'RH 1', rh2: 'RH 2', financeiro: 'Financeiro', alteracao: 'Alteração solicitada', encerrada: 'Encerrada', reprovada: 'Reprovada' };
+const KB_MAX_CARTOES = 25;
+function vwToggleHtml(view) {
+  return `<div class="period-filter" data-vw role="group" aria-label="Visualização"><button type="button" data-vw="lista" class="${view === 'lista' ? 'active' : ''}">${ICONS.list}Lista</button><button type="button" data-vw="kanban" class="${view === 'kanban' ? 'active' : ''}">${ICONS.layers}Kanban</button></div>`;
+}
+// colunas: na página geral por situação; em cada módulo pelas etapas do fluxo daquele módulo
+function kbColunas(tipo, itens) {
+  const lim = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const enc = itens.filter(x => x.status === 'encerrada');
+  const enc30 = enc.filter(x => String(x.encerradoEm || x.atualizadoEm || '').slice(0, 10) >= lim);
+  const col = (t, cor, lista, extra) => Object.assign({ t, cor, lista }, extra || {});
+  const por = (...sts) => itens.filter(x => sts.includes(x.status));
+  const encerradas = col('Encerradas', 'var(--good)', enc30, { sub: 'últimos 30 dias', total: enc.length, ver: 'encerrada' });
+  if (!tipo) return [
+    col('Aguardando minha ação', 'var(--c1)', itens.filter(aguardaMinhaAcao)),
+    col('Em andamento', 'var(--warning)', itens.filter(x => ABERTAS.includes(x.status) && !aguardaMinhaAcao(x))),
+    col('Devolvidas p/ alteração', 'var(--serious)', por('alteracao')),
+    encerradas,
+    col('Reprovadas', 'var(--critical)', por('reprovada'), { ver: 'reprovada', total: por('reprovada').length }),
+  ];
+  const a1 = col('Aprovação 1', '#14c26b', por('aprovacao1')), a2 = col('Aprovação 2', '#DB2777', por('aprovacao2')), fin = col('Financeiro', 'var(--c7)', por('financeiro'));
+  const fluxo = tipo === 'reembolso' ? [col('Aprovação Fiscal', '#F97316', por('fiscal')), a1, a2, fin]
+    : tipo === 'freelancer' ? [a1, a2, col('RH 1', '#0EA5A4', por('rh')), col('Financeiro / RH 2', 'var(--c7)', por('financeiro', 'rh2'), { sub: 'RH 2 acompanha os recorrentes' })]
+    : tipo === 'rescisao' ? [col('RH 1', '#0EA5A4', por('rh')), a1, a2, fin]
+    : [a1, a2, fin];
+  return fluxo.concat([Object.assign(encerradas, { t: 'Encerrado' })]);
+}
+function kbCartao(x, modulo) {
+  const mine = aguardaMinhaAcao(x);
+  return `<div class="kb-card ${mine ? 'mine' : ''}" role="button" tabindex="0" data-kb-open="${x.id}" title="Abrir ${escapeHtml(x.numero)}">
+    <div class="kb-top"><span>${escapeHtml(x.numero)}</span><span class="badge">${escapeHtml(x.tipoLabel)}</span></div>
+    <div class="kb-title">${escapeHtml(x.titulo)}</div>
+    <div class="kb-meta"><span class="dept-chip">${escapeHtml(depNome(x.departamentoId))}</span><span>${escapeHtml(x.solicitanteNome || '')}</span></div>
+    <div class="kb-foot"><span class="kb-val">${fmtBRL(x.valor)}</span><span class="kb-date">pgto ${fmtDate(x.dataPagamento)}</span></div>
+    <div class="kb-flags">${modulo ? '' : `<span class="st st-${x.status}">${escapeHtml(KB_ROTULO[x.status] || x.status)}</span>`}${x.atrasada ? '<span class="st st-atrasada">Atrasada</span>' : ''}${x.docFiscalVencido ? '<span class="st st-atrasada" title="Documento fiscal em atraso">Doc. fiscal</span>' : ''}${mine ? '<span class="kb-mine-tag">sua ação</span>' : ''}</div>
+  </div>`;
+}
+function kbAreaHtml(all, st, modulo) {
+  const lista = filtrarSolic(all, st, !!modulo, true);
+  const cols = kbColunas(modulo ? modulo.tipo : null, lista);
+  const soma = (arr) => arr.reduce((t, x) => t + (Number(x.valor) || 0), 0);
+  const board = cols.map(c => {
+    const vis = c.lista.slice(0, KB_MAX_CARTOES), resto = (c.total !== undefined ? c.total : c.lista.length) - vis.length;
+    return `<div class="kb-col"><div class="kb-head"><h3><span class="kb-dot" style="background:${c.cor}"></span>${escapeHtml(c.t)}</h3><span class="kb-count">${c.lista.length}</span></div>
+      <div class="kb-sum">${c.sub ? escapeHtml(c.sub) + ' · ' : ''}${fmtBRL(soma(c.lista))}</div>
+      ${vis.length ? vis.map(x => kbCartao(x, modulo)).join('') : '<div class="kb-empty">Nenhuma solicitação</div>'}
+      ${resto > 0 ? `<div class="kb-more" ${c.ver ? `data-kb-ver="${c.ver}" role="button" tabindex="0"` : ''}>${c.ver ? `Ver todas as ${c.total} na lista` : `+ ${resto} na lista`}</div>` : (c.ver && c.total > c.lista.length ? `<div class="kb-more" data-kb-ver="${c.ver}" role="button" tabindex="0">Ver todas as ${c.total} na lista</div>` : '')}
+    </div>`;
+  }).join('');
+  let lane = '';
+  if (modulo) {  // devolvidas e reprovadas ficam numa faixa abaixo do quadro, para não poluir as etapas
+    const dev = lista.filter(x => x.status === 'alteracao'), rep = lista.filter(x => x.status === 'reprovada');
+    lane = `<div class="kb-lane"><button type="button" class="kb-chip ${st.lane === 'alteracao' ? 'on' : ''}" data-kb-lane="alteracao">Alteração solicitada · ${dev.length}</button><button type="button" class="kb-chip ${st.lane === 'reprovada' ? 'on' : ''}" data-kb-lane="reprovada">Reprovadas · ${rep.length}</button></div>
+      ${st.lane ? `<div class="kb-lane-cards">${(st.lane === 'alteracao' ? dev : rep).map(x => kbCartao(x, modulo)).join('') || '<div class="kb-empty">Nenhuma solicitação</div>'}</div>` : ''}`;
+  }
+  return `<div class="kb-board" style="--kb-cols:${cols.length}">${board}</div>${lane}`;
+}
+function kanbanHtml(all, st, modulo) {
+  return `<div class="kb-wrap" data-kb>
+    <div class="vw-bar">${vwToggleHtml('kanban')}
+      <div class="search-box">${ICONS.search}<input data-kf="search" placeholder="Buscar por nº, título, solicitante, fornecedor…" value="${escapeHtml(st.search)}"/></div>
+      <select data-kf="dep"><option value="">Departamento (todos)</option>${selectOptions(DB.departamentos, st.dep)}</select>
+      ${modulo ? '' : `<select data-kf="tipo"><option value="">Tipo (todos)</option>${Object.entries(DB.tiposSolicitacao).map(([k, v]) => `<option value="${k}" ${st.tipo === k ? 'selected' : ''}>${escapeHtml(v)}</option>`).join('')}</select>`}
+    </div>
+    <div data-kb-area>${kbAreaHtml(all, st, modulo)}</div></div>`;
+}
+function wireVista(el, repaint) {
+  el.querySelectorAll('[data-vw] button').forEach(b => b.addEventListener('click', () => { if (b.dataset.vw !== solView()) { setSolView(b.dataset.vw); repaint(); } }));
+}
+function wireKanban(el, all, st, modulo, repaint) {
+  const kb = el.querySelector('[data-kb]');
+  if (!kb) return;
+  const area = kb.querySelector('[data-kb-area]');
+  const ativa = (e, fn) => e.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); fn(); } });
+  const ligar = () => {
+    area.querySelectorAll('[data-kb-open]').forEach(c => { const abrir = () => openSolicitacao(Number(c.dataset.kbOpen)); c.addEventListener('click', abrir); ativa(c, abrir); });
+    area.querySelectorAll('[data-kb-ver]').forEach(c => { const ir = () => { st.status = c.dataset.kbVer; st.page = 1; setSolView('lista'); repaint(); }; c.addEventListener('click', ir); ativa(c, ir); });
+    area.querySelectorAll('[data-kb-lane]').forEach(b => b.addEventListener('click', () => { st.lane = st.lane === b.dataset.kbLane ? null : b.dataset.kbLane; rer(); }));
+  };
+  const rer = () => { const sl = (area.querySelector('.kb-board') || {}).scrollLeft || 0; area.innerHTML = kbAreaHtml(all, st, modulo); const b = area.querySelector('.kb-board'); if (b) b.scrollLeft = sl; ligar(); };
+  kb.querySelector('[data-kf="search"]').addEventListener('input', debounce(e => { st.search = e.target.value; rer(); }, 200));
+  kb.querySelector('[data-kf="dep"]').addEventListener('change', e => { st.dep = e.target.value; rer(); });
+  const ft = kb.querySelector('[data-kf="tipo"]'); if (ft) ft.addEventListener('change', e => { st.tipo = e.target.value; rer(); });
+  ligar();
 }
 
 function bloco(titulo, ico, lista, vazio, sub) {
@@ -153,13 +245,17 @@ function tabelaSolicitacoes(lista, resumo = false) {
       <td><div class="row-actions" style="justify-content:flex-end;"><button class="icon-btn" title="Abrir">${ICONS.eye}</button></div></td>
     </tr>`).join('')}</tbody></table>`;
 }
-function resumoGeral(all, st, semFiltroTipo) {
+function filtrarSolic(all, st, semFiltroTipo, ignorarStatus) {
   let lista = all.slice();
   const q = st.search.trim().toLowerCase();
   if (q) lista = lista.filter(s => [s.numero, s.titulo, s.solicitanteNome, depNome(s.departamentoId), s.dados.fornecedor, s.dados.cliente].filter(Boolean).join(' ').toLowerCase().includes(q));
-  if (st.status) lista = lista.filter(s => st.status === 'abertas' ? ABERTAS.includes(s.status) : s.status === st.status);
+  if (st.status && !ignorarStatus) lista = lista.filter(s => st.status === 'abertas' ? ABERTAS.includes(s.status) : s.status === st.status);
   if (st.dep) lista = lista.filter(s => s.departamentoId === st.dep);
   if (st.tipo && !semFiltroTipo) lista = lista.filter(s => s.tipo === st.tipo);
+  return lista;
+}
+function resumoGeral(all, st, semFiltroTipo) {
+  const lista = filtrarSolic(all, st, semFiltroTipo);
   const totalPages = Math.max(1, Math.ceil(lista.length / st.pageSize));
   st.page = clamp(st.page, 1, totalPages);
   const pg = lista.slice((st.page - 1) * st.pageSize, st.page * st.pageSize);
