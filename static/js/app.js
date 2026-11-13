@@ -141,7 +141,12 @@ async function boot() {
       if (me.user) {
         if (me.user.senhaProvisoria) { showLoginScreen(); toast('Entre com sua senha provisória para definir uma nova senha.', 'info'); }
         else await enterApp();
-      } else showLoginScreen();
+      } else {
+        showLoginScreen();
+        let expirou = false;
+        try { expirou = sessionStorage.getItem('nexarpay.sessaoExpirada') === '1'; sessionStorage.removeItem('nexarpay.sessaoExpirada'); } catch (e) { }
+        if (expirou) toast('Sua sessão expirou. Faça login novamente.', 'error');
+      }
     }
   } catch (err) {
     console.error('Falha ao iniciar:', err);

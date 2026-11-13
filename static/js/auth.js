@@ -101,14 +101,22 @@ function wireAuthUI() {
     } catch (err) { showFormError('changePassError', err.message); }
   });
 
+  // Sair: encerra a sessão no servidor e RECARREGA a página. Assim somem da memória e da tela os dados do usuário anterior
+  // (usuários, auditoria, solicitações…) e param os temporizadores (atualização automática), que antes seguiam rodando por trás do login.
   document.getElementById('logoutBtn').addEventListener('click', async () => {
-    try { await api('POST', '/auth/logout'); } catch (e) { }
-    closeModal();
-    DB.user = null;
-    showLoginScreen();
+    window.__saindo = true;
+    try { await api('POST', '/auth/logout'); }
+    catch (e) { window.__saindo = false; toast('Não foi possível encerrar a sessão: ' + (e.message || 'tente novamente.'), 'error'); return; }
+    location.reload();
   });
 
-  window.__onSessionExpired = () => { toast('Sua sessão expirou. Faça login novamente.', 'error'); DB.user = null; closeModal(); showLoginScreen(); };
+  // Sessão expirada (401 em qualquer chamada): também recarrega, guardando o aviso para mostrar na tela de login
+  window.__onSessionExpired = () => {
+    if (window.__saindo) return;
+    window.__saindo = true;
+    try { sessionStorage.setItem('nexarpay.sessaoExpirada', '1'); } catch (e) { /* sem armazenamento: só não mostra o aviso */ }
+    location.reload();
+  };
 }
 
 /* ---- confirmação de senha para ações sensíveis (cria/edita usuário, backup) ---- */
