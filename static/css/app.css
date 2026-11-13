@@ -799,7 +799,7 @@ body:not(.perfil-admin) .scenario-radio{ pointer-events:none; cursor:default; op
 .qa-plus:hover{ background:var(--c1); border-color:var(--c1); color:#fff; }
 
 /* Visualização Kanban das solicitações (somente leitura) */
-.vw-bar{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 14px; }
+.vw-bar{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:26px 0 14px; }  /* 26px: mesmo respiro entre blocos da página (.quick-access / .sol-block) */
 .vw-bar .search-box{ flex:1; min-width:220px; }
 .vw-bar .period-filter button{ display:inline-flex; align-items:center; gap:6px; }
 .vw-bar .period-filter svg{ width:14px; height:14px; }
