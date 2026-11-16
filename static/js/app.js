@@ -76,7 +76,9 @@ function buildSidebar() {
   const nav = document.getElementById('navList');
   const pages = pagesForCurrentUser().filter(p => !p.oculto);  // "oculto": só aparece pelo cartão do usuário
   const ids = new Set(pages.map(p => p.id));
-  const subItem = (p) => `<div class="nav-item nav-sub-item ${p.id === currentPage ? 'active' : ''}" data-page="${p.id}">${icon(p.ico)}<span>${p.label}</span></div>`;
+  const pend = (typeof pendenciasPorModulo === 'function' && DB.user) ? pendenciasPorModulo() : {};
+  const ponto = (n) => n > 0 ? `<span class="nav-dot" role="img" aria-label="${n} pendência(s) de ação" title="${n} pendência(s) aguardando você"></span>` : '';
+  const subItem = (p) => `<div class="nav-item nav-sub-item ${p.id === currentPage ? 'active' : ''}" data-page="${p.id}">${icon(p.ico)}<span>${p.label}</span>${ponto(pend[p.id] || 0)}</div>`;
   let html = '';
   pages.forEach(p => {
     const g = GRUPOS_MENU.find(x => x.main === p.id);
@@ -84,7 +86,7 @@ function buildSidebar() {
     if (g && subs.length) {
       const aberto = !!grupoAberto[g.key], emSubAtiva = subs.some(x => x.id === currentPage);
       html += `<div class="nav-item nav-group-toggle ${p.id === currentPage ? 'active' : emSubAtiva ? 'active-parent' : ''}" data-page="${p.id}">
-          ${icon(p.ico)}<span class="nav-group-label-text">${p.label}</span><span class="nav-caret ${aberto ? 'open' : ''}" data-group-toggle="${g.key}" role="button" aria-label="Mostrar mais opções de ${p.label}" title="Mostrar mais opções">${ICONS.chevDown}</span>
+          ${icon(p.ico)}<span class="nav-group-label-text">${p.label}</span>${g.key === 'solicitacoes' ? ponto(subs.reduce((t, x) => t + (pend[x.id] || 0), 0)) : ''}<span class="nav-caret ${aberto ? 'open' : ''}" data-group-toggle="${g.key}" role="button" aria-label="Mostrar mais opções de ${p.label}" title="Mostrar mais opções">${ICONS.chevDown}</span>
         </div>
         <div class="nav-submenu ${aberto ? 'open' : ''}" data-group-panel="${g.key}">${subs.map(subItem).join('')}</div>`;
     } else if (GRUPOS_MENU.some(x => x.subs.includes(p.id) && ids.has(x.main))) {

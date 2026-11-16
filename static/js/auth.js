@@ -233,6 +233,7 @@ async function enterApp() {
   navigateTo(defaultPageFor(DB.user.perfil));
   toast(`Bem-vindo(a), ${DB.user.nome.split(' ')[0]}.`, 'success');
   startSolicitacoesAutoRefresh();
+  startMenuAlertas();
 }
 
 function openChangePasswordModal() {

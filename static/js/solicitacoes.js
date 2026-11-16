@@ -1,8 +1,8 @@
 /* ===================== NexarPay — Solicitações de Pagamento (visão por perfil, formulários, aprovação, linha do tempo) ===================== */
 
-// Páginas de módulo (Solicitações > Cliente/Fornecedor, Reembolso, Freelancer, Rescisões, Interno): mesmo modelo da página Solicitações, filtrado por tipo
+// Páginas de módulo (Solicitações > Produtos e Serviços, Reembolso, Freelancer, Rescisões, Interno): mesmo modelo da página Solicitações, filtrado por tipo
 const SOL_MODULOS = [
-  { id: 'sol_fornecedor', tipo: 'fornecedor', label: 'Cliente/Fornecedor', ico: 'truck' },
+  { id: 'sol_fornecedor', tipo: 'fornecedor', label: 'Produtos e Serviços', ico: 'truck' },
   { id: 'sol_reembolso', tipo: 'reembolso', label: 'Reembolso', ico: 'repeat' },
   { id: 'sol_freelancer', tipo: 'freelancer', label: 'Freelancer', ico: 'users' },
   { id: 'sol_rescisao', tipo: 'rescisao', label: 'Rescisões', ico: 'userX' },
@@ -26,6 +26,30 @@ function aguardaMinhaAcao(s) {
   return false;
 }
 function souSolicitante(s) { return DB.user && s.solicitanteId === DB.user.id; }
+
+/* ---------- alertas de ação (ponto vermelho no menu) ----------
+   Conta o que depende do usuário: pedidos esperando a aprovação dele e pedidos dele devolvidos para alteração.
+   O ponto some sozinho quando não resta nenhuma pendência no módulo. */
+function acaoPendente(s) { return aguardaMinhaAcao(s) || (s.status === 'alteracao' && souSolicitante(s)); }
+function pendenciasPorModulo() {
+  const r = {};
+  SOL_MODULOS.forEach(m => { r[m.id] = 0; });
+  (DB.solicitacoes || []).forEach(s => { if (!acaoPendente(s)) return; const m = SOL_MODULOS.find(x => x.tipo === s.tipo); if (m) r[m.id]++; });
+  return r;
+}
+let menuAlertaAssinatura = '', menuAlertaTimer = null;
+function atualizarIndicadoresMenu() {
+  if (!DB.user || typeof buildSidebar !== 'function') return;
+  const sig = JSON.stringify(pendenciasPorModulo());
+  if (sig !== menuAlertaAssinatura) { menuAlertaAssinatura = sig; buildSidebar(); }
+}
+function startMenuAlertas() {  // busca as pendências ao entrar e a cada 30 s nas telas que não se atualizam sozinhas
+  if (menuAlertaTimer) return;
+  const buscar = () => { if (!document.hidden && !ehPaginaSolicitacoes(currentPage)) reloadSolicitacoes().catch(() => { }); };
+  reloadSolicitacoes().catch(() => { });
+  menuAlertaTimer = setInterval(buscar, 30000);
+  window.addEventListener('focus', buscar);
+}
 
 async function renderSolPagina(pageId) {
   const el = document.getElementById('page-' + pageId);
@@ -53,7 +77,7 @@ function acessoRapidoHtml() {
     const abertas = DB.solicitacoes.filter(x => x.tipo === m.tipo && ABERTAS.includes(x.status)).length;
     return `<div class="qa-tile" role="link" tabindex="0" data-qa="${m.id}" title="Abrir ${escapeHtml(m.label)}">
       ${moduloPodeCriar(m.tipo) ? `<button type="button" class="qa-plus" data-qa-new="${m.tipo}" aria-label="Nova solicitação de ${escapeHtml(m.label)}" title="Nova solicitação de ${escapeHtml(m.label)}">${ICONS.plus}</button>` : ''}
-      ${icon(m.ico)}<div class="qa-name">${escapeHtml(m.label)}</div><div class="qa-count">${abertas ? abertas + ' em aberto' : 'nenhuma em aberto'}</div></div>`;
+      ${icon(m.ico)}<div class="qa-name">${escapeHtml(m.label)}</div><div class="qa-count ${abertas ? 'alerta' : ''}">${abertas ? abertas + ' em aberto' : 'nenhuma em aberto'}</div></div>`;
   }).join('');
   return tiles ? `<div class="quick-access anim-in"><div class="section-title-row"><h2>${icon('zap')} Acesso Rápido</h2></div><div class="qa-grid">${tiles}</div></div>` : '';
 }
@@ -78,7 +102,7 @@ function paintSolicitacoes(pageId) {
   const soma = (arr) => arr.reduce((t, s) => t + (Number(s.valor) || 0), 0);
   const trava = DB.trava || {};
   const tf = DB.travaFreelancer || {};
-  const pendDoc = (trava.pendentes || []).filter(x => !(trava.vencidas || []).find(v => v.id === x.id));
+  const pendDoc = trava.bloqueado ? (trava.pendentes || []).filter(x => !(trava.vencidas || []).find(v => v.id === x.id)) : (trava.pendentes || []);
   const mostraTrava = !tipo || (tipo !== 'freelancer' && tipo !== 'rescisao'), mostraFrl = !tipo || tipo === 'freelancer';
 
   const kpis = [
@@ -108,9 +132,9 @@ function paintSolicitacoes(pageId) {
       ${podeNova ? `<button class="btn btn-cta" id="btnNovaSolicitacao">${ICONS.plus}NOVA SOLICITAÇÃO</button>` : ''}
     </div>
     ${mostraTrava && trava.bloqueado ? `<div class="alert-box">${icon('alert')}<div><strong>${escapeHtml(trava.mensagem || '')}</strong><div style="margin-top:4px;">${(trava.vencidas || []).map(v => `<a href="#" data-open-sol="${v.id}" style="color:inherit;font-weight:700;">${escapeHtml(v.numero)}</a> (prazo ${fmtDate(v.prazo)})`).join(' · ')}</div></div></div>` : ''}
-    ${mostraTrava && pendDoc.length ? `<div class="alert-box warn">${icon('fileText')}<div><strong>Documento fiscal pendente</strong> em ${pendDoc.map(v => `<a href="#" data-open-sol="${v.id}" style="color:inherit;font-weight:700;">${escapeHtml(v.numero)}</a> (até ${fmtDate(v.prazo)})`).join(', ')}. Anexe dentro do prazo para não bloquear novas solicitações.</div></div>` : ''}
+    ${mostraTrava && pendDoc.length ? `<div class="alert-box warn">${icon('fileText')}<div><strong>Documento fiscal pendente</strong> em ${pendDoc.map(v => `<a href="#" data-open-sol="${v.id}" style="color:inherit;font-weight:700;">${escapeHtml(v.numero)}</a> (${v.atraso > 0 ? 'ATRASADO há ' + v.atraso + ' dia(s)' : 'até ' + fmtDate(v.prazo)})`).join(', ')}. Anexe o quanto antes: você recebe um lembrete por e-mail todos os dias até o envio.</div></div>` : ''}
     ${mostraFrl && (me.rh1 || me.rh2) && all.some(x => x.alertaTermino !== null && x.alertaTermino !== undefined) ? `<div class="alert-box warn">${icon('clock')}<div><strong>Freelancer recorrente: contrato perto do fim</strong><div style="margin-top:4px;">${all.filter(x => x.alertaTermino !== null && x.alertaTermino !== undefined).map(x => `<a href="#" data-open-sol="${x.id}" style="color:inherit;font-weight:700;">${escapeHtml(x.numero)}</a> — ${escapeHtml(x.dados.nomeFreelancer || '')} (${x.alertaTermino > 0 ? 'termina em ' + x.alertaTermino + ' dia(s)' : x.alertaTermino === 0 ? 'termina hoje' : 'terminou há ' + (-x.alertaTermino) + ' dia(s)'})`).join(' · ')}. Ajuste o valor/término ou encerre. O sistema também envia e-mail todos os dias.</div></div></div>` : ''}
-    ${mostraFrl && tf.bloqueado ? `<div class="alert-box">${icon('alert')}<div><strong>${escapeHtml(tf.mensagem || '')}</strong><div style="margin-top:4px;">${(tf.vencidas || []).map(v => `<a href="#" data-open-sol="${v.id}" style="color:inherit;font-weight:700;">${escapeHtml(v.numero)}</a> (${escapeHtml(v.nome || '')}, término ${fmtDate(v.dataFim)})`).join(' · ')}</div></div></div>` : mostraFrl && (tf.pendentes || []).length ? `<div class="alert-box warn">${icon('fileText')}<div><strong>Freelancer: Nota Fiscal pendente</strong> em ${(tf.pendentes || []).map(v => `<a href="#" data-open-sol="${v.id}" style="color:inherit;font-weight:700;">${escapeHtml(v.numero)}</a> (até ${fmtDate(v.dataFim)})`).join(', ')}. Anexe a NF até o fim da contratação para não ficar bloqueado(a) de novas solicitações de Freelancer.</div></div>` : ''}
+    ${mostraFrl && tf.bloqueado ? `<div class="alert-box">${icon('alert')}<div><strong>${escapeHtml(tf.mensagem || '')}</strong><div style="margin-top:4px;">${(tf.vencidas || []).map(v => `<a href="#" data-open-sol="${v.id}" style="color:inherit;font-weight:700;">${escapeHtml(v.numero)}</a> (${escapeHtml(v.nome || '')}, término ${fmtDate(v.dataFim)})`).join(' · ')}</div></div></div>` : mostraFrl && (tf.pendentes || []).length ? `<div class="alert-box warn">${icon('fileText')}<div><strong>Freelancer: Nota Fiscal pendente</strong> em ${(tf.pendentes || []).map(v => `<a href="#" data-open-sol="${v.id}" style="color:inherit;font-weight:700;">${escapeHtml(v.numero)}</a> (${v.atraso > 0 ? 'ATRASADO há ' + v.atraso + ' dia(s)' : 'até ' + fmtDate(v.dataFim)})`).join(', ')}. Anexe a NF o quanto antes: você recebe um lembrete por e-mail todos os dias até o envio.</div></div>` : ''}
     <div class="grid ${kpis.length === 4 ? 'grid-4' : 'grid-3'} anim-in">${kpis.join('')}</div>
     ${modulo ? '' : acessoRapidoHtml()}
     ${view === 'kanban' ? kanbanHtml(all, st, modulo) : `<div class="vw-bar">${vwToggleHtml('lista')}</div>${blocos.join('')}${resumo}`}
@@ -294,7 +318,7 @@ function openTipoSolicitacao() {
     <div class="modal-body">
       <p style="font-size:13px; color:var(--text-dim); margin-bottom:14px;">A solicitação é para pagamento de:</p>
       <div class="type-grid">
-        ${DB.user && DB.user.perfil === 'rh' ? '' : `<div class="type-card" data-tipo="fornecedor">${icon('truck')}<strong>CLIENTE/FORNECEDOR</strong><span>Pagamento a um fornecedor ou reembolso a um cliente, vinculado a uma OC/PI/PC/PO/OP.</span></div>`}
+        ${DB.user && DB.user.perfil === 'rh' ? '' : `<div class="type-card" data-tipo="fornecedor">${icon('truck')}<strong>PRODUTOS E SERVIÇOS</strong><span>Pagamento a um fornecedor ou reembolso a um cliente, vinculado a um Pedido.</span></div>`}
         <div class="type-card" data-tipo="reembolso">${icon('repeat')}<strong>REEMBOLSO</strong><span>Despesa paga por você (alimentação, transporte, hospedagem…) com recibo ou nota fiscal.</span></div>
         <div class="type-card" data-tipo="freelancer">${icon('users')}<strong>FREELANCER</strong><span>Contratação de profissional autônomo por períodos pré-determinados.</span></div>
         ${podeSolicitarRescisao() ? `<div class="type-card" data-tipo="rescisao">${icon('userX')}<strong>RESCISÕES</strong><span>Custos de desligamento de colaboradores (aviso prévio, férias, FGTS…).</span></div>` : ''}
@@ -339,12 +363,12 @@ function openSolicitacaoForm(tipo, existente) {
   let campos = '';
   let titulo = '';
   if (tipo === 'fornecedor') {
-    titulo = 'Pagamento — Cliente/Fornecedor';
+    titulo = 'Pagamento — Produtos e Serviços';
     campos = `<div class="form-field full"><label>Título <span class="req">*</span></label><input class="input" name="titulo" required placeholder="Ex.: Pagamento ao Fornecedor XYZ ou Reembolso ao cliente XYZ" value="${escapeHtml(d.titulo || '')}"/></div>
       ${fSolicitante}${fEmail}${fDep}
       <div class="form-field"><label>Fornecedor <span class="req">*</span></label><input class="input" name="fornecedor" required placeholder="Quem irá receber o pagamento" value="${escapeHtml(d.fornecedor || '')}"/></div>
       ${fCliente}${fEmpresa}
-      <div class="form-field"><label>Nº de Referência <span class="req">*</span></label>
+      <div class="form-field"><label>Nº do Pedido <span class="req">*</span></label>
         <div class="ref-add"><input class="input" id="refInput" maxlength="60" placeholder="Ex.: OC-2026-001, PI-4587, OS-1234" autocomplete="off"/><button type="button" class="btn" id="refAddBtn">Adicionar</button></div>
         <div class="ref-list" id="refList"></div></div>
       ${fDesc}${fValor}${fData('Data do Pagamento')}${fErro}${fAnexos('Documento', false)}`;
@@ -381,7 +405,7 @@ function openSolicitacaoForm(tipo, existente) {
         <label class="radio-chip"><input type="radio" name="recorrente" value="nao" ${d.recorrente === 'nao' ? 'checked' : ''} required/> Não</label></div></div>
       <div class="form-field"><label>Modalidade <span class="req">*</span></label><select name="modalidade" required><option value="">Selecione…</option>${selectOptions([{ id: 'presencial', nome: 'Presencial' }, { id: 'home_office', nome: 'Home office' }, { id: 'hibrido', nome: 'Híbrido' }], d.modalidade)}</select></div>
       <div class="form-field"><label>Data de início <span class="req">*</span></label><input class="input" type="date" name="dataInicio" required value="${escapeHtml(d.dataInicio || '')}"/></div>
-      <div class="form-field"><label>Data de término <span class="req">*</span></label><input class="input" type="date" name="dataFim" required value="${escapeHtml(d.dataFim || '')}"/><span class="form-hint">No máximo 31 dias a partir do início. Término anterior a hoje: somente a Diretoria faz o pedido.</span></div>
+      <div class="form-field"><label>Data de término <span class="req">*</span></label><input class="input" type="date" name="dataFim" required value="${escapeHtml(d.dataFim || '')}"/></div>
       ${fValor}
       <div class="form-field"><label>Nome completo do freelancer <span class="req">*</span></label><input class="input" name="nomeFreelancer" required value="${escapeHtml(d.nomeFreelancer || '')}"/></div>
       <div class="form-section">Dados bancários</div>
@@ -412,7 +436,7 @@ function openSolicitacaoForm(tipo, existente) {
 
   const form = document.getElementById('solForm');
   attachMoneyMask(document.getElementById('valorInput'));
-  // Nº de Referência (Cliente/Fornecedor): vários números, cada um com X para remover
+  // Nº do Pedido (Produtos e Serviços): vários números, cada um com X para remover
   let refs = tipo === 'fornecedor' ? (Array.isArray(d.referencias) ? d.referencias.slice() : String(d.numeroOcPi || '').split(',').map(x => x.trim()).filter(Boolean)) : [];
   const refInput = document.getElementById('refInput'), refList = document.getElementById('refList');
   const paintRefs = () => {
@@ -423,7 +447,7 @@ function openSolicitacaoForm(tipo, existente) {
   const addRef = () => {
     const v = refInput.value.replace(/\s+/g, ' ').trim();
     if (!v) { refInput.focus(); return false; }
-    if (!refs.some(x => x.toLowerCase() === v.toLowerCase())) refs.push(v); else toast('Esse número de referência já foi adicionado.', 'info');
+    if (!refs.some(x => x.toLowerCase() === v.toLowerCase())) refs.push(v); else toast('Esse número de pedido já foi adicionado.', 'info');
     refInput.value = ''; paintRefs(); refInput.focus(); return true;
   };
   if (refInput) {
@@ -462,15 +486,13 @@ function openSolicitacaoForm(tipo, existente) {
     if (!String(fd.email).toLowerCase().endsWith('@' + dom)) { toast('Use somente o e-mail corporativo @' + dom + '.', 'error'); return; }
     if (tipo === 'fornecedor') {
       if (refInput && refInput.value.trim()) addRef();  // digitou e esqueceu de clicar em Adicionar
-      if (!refs.length) { toast('Adicione ao menos um Nº de Referência (digite e clique em Adicionar).', 'error'); if (refInput) refInput.focus(); return; }
+      if (!refs.length) { toast('Adicione ao menos um Nº do Pedido (digite e clique em Adicionar).', 'error'); if (refInput) refInput.focus(); return; }
       dados.referencias = refs.slice();
     }
     if (tipo === 'reembolso' && !anexos.length) { toast('Anexe o recibo ou a nota fiscal do reembolso.', 'error'); return; }
     if (tipo === 'freelancer') {
       const di = new Date(dados.dataInicio + 'T00:00:00'), df = new Date(dados.dataFim + 'T00:00:00');
       if (!(df >= di)) { toast('A data de término não pode ser anterior à data de início.', 'error'); return; }
-      if (Math.round((df - di) / 86400000) > 31) { toast('O período do freelancer não pode passar de 31 dias (da data de início à data de término).', 'error'); return; }
-      if (dados.dataFim < todayISO() && me.perfil !== 'diretor') { toast('Pedido com data de término anterior a hoje só pode ser feito pela Diretoria.', 'error'); return; }
     }
     const payload = { tipo, departamentoId: fd.departamentoId, dados, anexos, comentario: fd.comentario || '' };
     if (tipo === 'freelancer') { payload.anexos = []; if (!editing && anexos[0]) payload.nf = { id: anexos[0].id }; }  // "Anexar NF": vira o documento fiscal do pedido
@@ -543,7 +565,7 @@ async function openSolicitacao(id) {
   const campo = (lab, val, full) => `<div class="${full ? 'full' : ''}"><label>${lab}</label><div class="v">${escapeHtml(val === undefined || val === null || val === '' ? '—' : val)}</div></div>`;
   const simNao = (v) => v === 'sim' ? 'Sim' : v === 'nao' ? 'Não' : '—';
   let campos = '';
-  if (s.tipo === 'fornecedor') campos = campo('Título', d.titulo, true) + campo('Solicitante', d.solicitante) + campo('E-mail', s.email) + campo('Departamento', depNome(s.departamentoId)) + campo('Fornecedor', d.fornecedor) + campo('Cliente', d.cliente) + campo('Empresa', d.empresa) + campo('Nº de Referência', d.numeroOcPi) + campo('Erro interno?', simNao(d.erroInterno));
+  if (s.tipo === 'fornecedor') campos = campo('Título', d.titulo, true) + campo('Solicitante', d.solicitante) + campo('E-mail', s.email) + campo('Departamento', depNome(s.departamentoId)) + campo('Fornecedor', d.fornecedor) + campo('Cliente', d.cliente) + campo('Empresa', d.empresa) + campo('Nº do Pedido', d.numeroOcPi) + campo('Erro interno?', simNao(d.erroInterno));
   else if (s.tipo === 'freelancer') campos = campo('Freelancer', d.nomeFreelancer, true) + campo('Solicitante', d.solicitante) + campo('E-mail', s.email) + campo('Departamento', depNome(s.departamentoId)) + campo('Empresa', d.empresa) + campo('Modalidade', ({ presencial: 'Presencial', home_office: 'Home office', hibrido: 'Híbrido' })[d.modalidade]) + campo('Recorrente?', simNao(d.recorrente)) + campo('Período', fmtDate(d.dataInicio) + ' a ' + fmtDate(d.dataFim)) + campo('Banco', d.banco) + campo('Agência', d.agencia) + campo('C/C', d.conta) + campo('CNPJ', d.cpfCnpj) + (d.rh ? campo('RH — profissional contratado?', simNao(d.rh.contratado)) + campo('Data de contratação', fmtDate(d.rh.dataContratacao)) + campo('Onboarding previsto', fmtDate(d.rh.dataOnboarding)) : '');
   else if (s.tipo === 'rescisao') campos = campo('Tipo', ({ pedido_dispensa: 'Pedido de Dispensa', dispensado: 'Dispensado' })[d.tipoRescisao], true) + campo('Solicitante', d.solicitante) + campo('E-mail', s.email) + campo('Departamento', depNome(s.departamentoId)) + campo('Empresa', d.empresa);
   else if (s.tipo === 'reembolso') campos = campo('Nome', d.nome) + campo('E-mail', s.email) + campo('Cliente', d.cliente) + campo('Reembolsado pelo cliente?', simNao(d.reembolsadoCliente)) + campo('Departamento', depNome(s.departamentoId)) + campo('Categoria da despesa', d.categoriaDespesa) + campo('Empresa', d.empresa) + campo('Dados bancários', [d.banco && 'Banco ' + d.banco, d.agencia && 'Ag. ' + d.agencia, d.conta && 'C/C ' + d.conta, d.cpfCnpj && 'CPF/CNPJ ' + d.cpfCnpj].filter(Boolean).join(' · '), true);
@@ -558,14 +580,15 @@ async function openSolicitacao(id) {
   if (s.status === 'encerrada' && s.tipo !== 'rescisao') {
     if (s.docFiscal) docFiscalHtml = `<div class="attach-item">${ICONS.checkCircle}<span class="nm">${escapeHtml(s.docFiscal.nome)}</span><span class="sz">anexado em ${fmtDateTime(s.docFiscal.anexadoEm)} por ${escapeHtml(s.docFiscal.por || '')}</span><a href="${fileUrl(s.docFiscal.id)}" target="_blank">Abrir</a></div>`;
     else {
-      const venc = s.docFiscalVencido;
+      const venc = s.docFiscalVencido, bloqAtivo = ((DB.config.docFiscal || {}).bloquear || {})[s.tipo] > 0;
       const podeAnexar = souSolicitante(s) || ['admin', 'gestor', 'financeiro'].includes(me.perfil);
-      docFiscalHtml = `<div class="alert-box ${venc ? '' : 'warn'}" style="margin-bottom:8px;">${icon('alert')}<div><strong>${venc ? 'Prazo vencido' : 'Pendente'}:</strong> anexe ${docLabel} até <strong>${fmtDate(s.prazoDocFiscal)}</strong>${venc ? ' — novas solicitações do solicitante estão bloqueadas até o envio.' : '.'}</div></div>
+      docFiscalHtml = `<div class="alert-box ${venc ? '' : 'warn'}" style="margin-bottom:8px;">${icon('alert')}<div><strong>${venc ? 'Prazo vencido' : 'Pendente'}:</strong> anexe ${docLabel} até <strong>${fmtDate(s.prazoDocFiscal)}</strong>${venc && bloqAtivo ? ' — novos pedidos do solicitante ficam bloqueados até o envio.' : '.'}</div></div>
+        ${venc && bloqAtivo && ['admin', 'financeiro'].includes(me.perfil) ? `<div style="margin:0 0 8px;"><button class="btn btn-sm" id="docLiberar">${ICONS.key}Liberar novos pedidos do solicitante</button><span class="form-hint" style="margin-left:8px;">Libera por alguns dias, com justificativa registrada.</span></div>` : ''}
         ${podeAnexar ? `<div class="upload-slot" id="docFiscalSlot"><div class="upload-ico">${ICONS.upload}</div><div class="upload-text"><strong>Anexar ${escapeHtml(docLabel)}</strong><span>PDF, DOCX, XLSX, PNG ou JPEG · até ${DB.config.maxUploadMB || 20} MB</span></div></div><input type="file" id="docFiscalInput" accept=".pdf,.docx,.xlsx,.png,.jpg,.jpeg" style="display:none;"/>` : ''}`;
     }
   }
 
-  if (s.tipo === 'freelancer' && s.docFiscal && me.perfil === 'financeiro') docFiscalHtml += `<div style="margin-top:8px;"><button class="btn btn-sm btn-danger" id="docRemover">${ICONS.trash}Remover NF anexada</button><span class="form-hint" style="margin-left:8px;">Se a contratação já terminou, o bloqueio do solicitante volta a valer.</span></div>`;
+  if (s.tipo === 'freelancer' && s.docFiscal && me.perfil === 'financeiro') docFiscalHtml += `<div style="margin-top:8px;"><button class="btn btn-sm btn-danger" id="docRemover">${ICONS.trash}Remover NF anexada</button><span class="form-hint" style="margin-left:8px;">O solicitante volta a receber os lembretes por e-mail até anexar de novo.</span></div>`;
 
   // ações disponíveis
   const acoes = [];
@@ -582,9 +605,9 @@ async function openSolicitacao(id) {
     else acoes.push(`<button class="btn btn-danger" id="actReprovar">${ICONS.xCircle}REPROVAR</button>`, `<button class="btn btn-warn" id="actAlterar">${ICONS.edit}ALTERAR</button>`, `<button class="btn btn-approve" id="actAprovar">${ICONS.check}APROVAR</button>`);
   }
 
-  const histIco = { doc_fiscal_removido: 'trash', criada: 'send', reenviada: 'send', aprovada: 'check', alteracao_solicitada: 'edit', editada: 'repeat', reprovada: 'xCircle', encerrada: 'flag', doc_fiscal_anexado: 'fileText', ajustada: 'edit' };
-  const histLabel = { criada: 'Solicitação enviada', reenviada: 'Solicitação reenviada para aprovação', aprovada: 'Aprovada', alteracao_solicitada: 'Alteração solicitada', editada: 'Solicitação alterada pelo solicitante', reprovada: 'Reprovada', encerrada: 'Encerrada — pagamento autorizado', ajustada: 'Valor/término ajustado pelo RH 2', doc_fiscal_anexado: 'Documento fiscal anexado', doc_fiscal_removido: 'Documento fiscal removido pelo Financeiro' };
-  const LABELS = { titulo: 'Título', solicitante: 'Solicitante', email: 'E-mail', fornecedor: 'Fornecedor', cliente: 'Cliente', numeroOcPi: 'Nº de Referência', referencias: 'Nº de Referência', descricao: 'Descrição', valor: 'Valor', dataPagamento: 'Data', erroInterno: 'Erro interno', nome: 'Nome', reembolsadoCliente: 'Reembolsado pelo cliente', categoriaDespesa: 'Categoria da despesa', empresa: 'Empresa', categoria: 'Categoria', banco: 'Banco', agencia: 'Agência', conta: 'Conta', cpfCnpj: 'CPF/CNPJ', anexos: 'Anexos' };
+  const histIco = { liberacao_solicitante: 'key', doc_fiscal_removido: 'trash', criada: 'send', reenviada: 'send', aprovada: 'check', alteracao_solicitada: 'edit', editada: 'repeat', reprovada: 'xCircle', encerrada: 'flag', doc_fiscal_anexado: 'fileText', ajustada: 'edit' };
+  const histLabel = { liberacao_solicitante: 'Solicitante liberado do bloqueio de documento fiscal', criada: 'Solicitação enviada', reenviada: 'Solicitação reenviada para aprovação', aprovada: 'Aprovada', alteracao_solicitada: 'Alteração solicitada', editada: 'Solicitação alterada pelo solicitante', reprovada: 'Reprovada', encerrada: 'Encerrada — pagamento autorizado', ajustada: 'Valor/término ajustado pelo RH 2', doc_fiscal_anexado: 'Documento fiscal anexado', doc_fiscal_removido: 'Documento fiscal removido pelo Financeiro' };
+  const LABELS = { titulo: 'Título', solicitante: 'Solicitante', email: 'E-mail', fornecedor: 'Fornecedor', cliente: 'Cliente', numeroOcPi: 'Nº do Pedido', referencias: 'Nº do Pedido', descricao: 'Descrição', valor: 'Valor', dataPagamento: 'Data', erroInterno: 'Erro interno', nome: 'Nome', reembolsadoCliente: 'Reembolsado pelo cliente', categoriaDespesa: 'Categoria da despesa', empresa: 'Empresa', categoria: 'Categoria', banco: 'Banco', agencia: 'Agência', conta: 'Conta', cpfCnpj: 'CPF/CNPJ', anexos: 'Anexos' };
   const fmtV = (k, v) => k === 'valor' ? fmtBRL(v) : k === 'dataPagamento' ? fmtDate(v) : Array.isArray(v) ? v.join(', ') : (v === undefined || v === null || v === '' ? '—' : String(v));
   const histHtml = h.slice().reverse().map(x => `<div class="hist-item">${icon(histIco[x.acao] || 'info')}<div>
       <div><strong>${escapeHtml(histLabel[x.acao] || x.acao)}${x.etapa && x.acao !== 'criada' && x.acao !== 'reenviada' ? ' · ' + ({ 3: 'Financeiro', 4: 'RH 1', 5: 'RH 2', 6: 'Aprovação Fiscal' }[x.etapa] || 'etapa ' + x.etapa) : ''}</strong> — ${escapeHtml(x.userNome || '')}</div>
@@ -592,6 +615,7 @@ async function openSolicitacao(id) {
       ${x.justificativa ? `<div class="just">${escapeHtml(x.justificativa)}</div>` : ''}
       ${x.acao === 'aprovada' && x.detalhes && x.detalhes.contratado ? `<div class="diff">Contratado: <b>${x.detalhes.contratado === 'sim' ? 'Sim' : 'Não'}</b>${x.detalhes.dataContratacao ? ' · contratação ' + escapeHtml(fmtDate(x.detalhes.dataContratacao)) : ''}${x.detalhes.dataOnboarding ? ' · onboarding previsto ' + escapeHtml(fmtDate(x.detalhes.dataOnboarding)) : ''}</div>` : ''}
       ${x.acao === 'aprovada' && x.detalhes && x.detalhes.recorrente ? `<div class="diff">Recorrente alterado: <b>${x.detalhes.recorrente.de === 'sim' ? 'Sim' : 'Não'}</b> → <b>${x.detalhes.recorrente.para === 'sim' ? 'Sim' : 'Não'}</b></div>` : ''}
+      ${x.acao === 'liberacao_solicitante' && x.detalhes ? `<div class="diff">Liberado por ${x.detalhes.dias} dia(s), até <b>${escapeHtml(fmtDate(x.detalhes.ate))}</b></div>` : ''}
       ${x.acao === 'ajustada' && x.detalhes ? `<div class="diff">${x.detalhes.valor ? `Valor: <b>${fmtBRL(x.detalhes.valor.de)}</b> → <b>${fmtBRL(x.detalhes.valor.para)}</b>` : ''}${x.detalhes.valor && x.detalhes.dataFim ? '<br/>' : ''}${x.detalhes.dataFim ? `Término: <b>${fmtDate(x.detalhes.dataFim.de)}</b> → <b>${fmtDate(x.detalhes.dataFim.para)}</b>` : ''}${(x.detalhes.anexos || []).length ? '<br/>Anexos: ' + escapeHtml(x.detalhes.anexos.join(', ')) : ''}</div>` : ''}
       ${x.acao === 'editada' && x.detalhes ? `<div class="diff">${Object.entries(x.detalhes).map(([k, v]) => `<b>${escapeHtml(LABELS[k] || k)}</b>: ${escapeHtml(fmtV(k, v.de))} → ${escapeHtml(fmtV(k, v.para))}`).join('<br/>') || 'Reenviada sem alterações de campos.'}</div>` : ''}
     </div></div>`).join('');
@@ -628,6 +652,19 @@ async function openSolicitacao(id) {
   if (b('actReprovar')) b('actReprovar').addEventListener('click', async () => { const j = await justificativaDialog({ title: 'Reprovar solicitação', message: 'A reprovação encerra o processo definitivamente. Informe o motivo.', okLabel: 'Reprovar', danger: true }); if (j) doAcao('reprovar', j); });
   if (b('actEditar')) b('actEditar').addEventListener('click', () => { closeModal(); setTimeout(() => openSolicitacaoForm(s.tipo, s), 200); });
   if (b('actExcluir')) b('actExcluir').addEventListener('click', async () => { if (await confirmDialog({ title: 'Excluir solicitação', message: `Excluir ${s.numero}? Esta ação não pode ser desfeita.` })) { try { await api('DELETE', `/solicitacoes/${s.id}`); closeModal(); toast('Solicitação excluída.', 'success'); await refresh(); } catch (e) { toast(e.message, 'error'); } } });
+  if (b('docLiberar')) b('docLiberar').addEventListener('click', () => {
+    openModal(`<div class="modal-head"><h3>${modalIcon('key')} Liberar novos pedidos do solicitante</h3><button class="modal-close" data-close-modal>${ICONS.x}</button></div>
+      <div class="modal-body"><form id="libForm"><div class="form-grid">
+        <div class="form-field"><label>Liberar por quantos dias? <span class="req">*</span></label><input class="input" type="number" name="dias" min="1" max="30" value="7" required/></div>
+        <div class="form-field full"><label>Justificativa <span class="req">*</span></label><textarea name="just" rows="3" placeholder="Por que liberar mesmo com o documento fiscal em atraso?" required></textarea><span class="form-hint">Fica registrada no histórico e na auditoria.</span></div>
+      </div></form></div>
+      <div class="modal-foot"><button class="btn" data-close-modal>Cancelar</button><button class="btn btn-primary" id="libOk">${ICONS.check}Liberar</button></div>`);
+    document.getElementById('libOk').addEventListener('click', async () => {
+      const f = document.getElementById('libForm'); if (!f.reportValidity()) return;
+      try { await api('POST', `/solicitacoes/${s.id}/liberar-solicitante`, { dias: Number(f.dias.value), justificativa: f.just.value.trim() }); closeModal(); toast('Solicitante liberado.', 'success'); await refresh(); setTimeout(() => openSolicitacao(s.id), 250); }
+      catch (e) { toast(e.message, 'error'); }
+    });
+  });
   if (b('docRemover')) b('docRemover').addEventListener('click', async () => {
     const j = await justificativaDialog({ title: 'Remover Nota Fiscal', message: 'A NF anexada será removida (fica registrada no histórico) e o solicitante precisará anexar de novo. Informe o motivo.', okLabel: 'Remover NF', danger: true });
     if (!j) return;

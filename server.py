@@ -93,7 +93,7 @@ PERFIS = {
     'tv': 'Dashboard (TV)',
 }
 TIPOS_SOLICITACAO = {
-    'fornecedor': 'Cliente/Fornecedor',
+    'fornecedor': 'Produtos e Serviços',
     'reembolso': 'Reembolso',
     'grupo': 'Interno',
     'freelancer': 'Freelancer',
@@ -115,13 +115,16 @@ STATUS_LABEL = {
     'reprovada': 'Reprovada',
     'encerrada': 'Encerrada',
 }
+CAT_PRODUTOS_SERVICOS = 'Produtos e Serviços'  # categoria de lançamento do módulo Produtos e Serviços (antes "Cliente/Fornecedor")
 STATUS_ABERTOS = ('fiscal', 'fiscal', 'aprovacao1', 'aprovacao2', 'rh', 'rh2', 'financeiro', 'alteracao')
 ETAPA_RH = 4   # etapa do RH no histórico (só no módulo Freelancer; o Financeiro continua sendo a etapa 3)
 ETAPA_RH2 = 5  # acompanhamento do Freelancer recorrente (RH 2), no lugar do Financeiro
 ETAPA_FISCAL = 6  # Aprovação Fiscal (só no módulo Reembolso): o Financeiro analisa antes da Aprovação 1
 DIAS_AVISO_TERMINO = 7
 MODALIDADES = {'presencial': 'Presencial', 'home_office': 'Home office', 'hibrido': 'Híbrido'}
-MAX_DIAS_FREELA = 31
+# Documento fiscal: bloqueio por atraso (parametrizável) e lembretes por e-mail
+DOC_FISCAL_PADRAO = {'bloquear': {'fornecedor': 0, 'grupo': 0, 'freelancer': 0, 'reembolso': 1}, 'copiaAposDias': 3, 'horarios': [9, 15]}  # bloquear: dias de atraso para travar novos pedidos (0 = nunca)
+TIPOS_LEMBRETE_NF = ('fornecedor', 'grupo', 'freelancer')  # módulos que recebem lembretes por e-mail (Reembolso mantém o bloqueio; Rescisão não tem documento fiscal)
 MSG_BLOQUEIO_FREELA = 'Atenção!!! Bloqueio de novas solicitações de Freelancer: há contratação encerrada sem a Nota Fiscal anexada. Anexe a NF para liberar.'
 
 DEFAULT_CONFIG = {
@@ -829,12 +832,38 @@ def init_db():
             criar_admin_inicial(conn)
     migrar_cifragem(conn)
     migrar_empresas(conn)
+    migrar_produtos_servicos(conn)
     for r in conn.execute('SELECT id,caminho FROM arquivos WHERE sha256 IS NULL').fetchall():  # hash dos anexos antigos (detecção de arquivo repetido)
         pth = os.path.join(UPLOAD_DIR, os.path.basename(r['caminho'] or ''))
         if os.path.isfile(pth):
             conn.execute('UPDATE arquivos SET sha256=? WHERE id=?', (_sha256_arquivo(pth), r['id']))
     conn.commit()
     conn.close()
+
+
+def migrar_produtos_servicos(conn):
+    """O módulo Cliente/Fornecedor passou a se chamar Produtos e Serviços: renomeia a categoria nos dados já gravados
+    (lista de categorias, linhas de orçamento e lançamentos). Idempotente: sem o nome antigo, não faz nada."""
+    velho, novo = '"Cliente/Fornecedor"', '"%s"' % CAT_PRODUTOS_SERVICOS
+    velho_nome, novo_nome = '"Pagamentos a Clientes/Fornecedores"', '"Pagamentos de Produtos e Serviços"'
+    n = 0
+    for tabela, coluna, chave in (('properties', 'valor', 'chave'), ('budgets', 'categorias', 'id'), ('launches', 'dados', 'id')):
+        for r in conn.execute('SELECT %s AS k, %s AS v FROM %s WHERE %s LIKE ? OR %s LIKE ?' % (chave, coluna, tabela, coluna, coluna), ('%Cliente/Fornecedor%', '%Clientes/Fornecedores%')).fetchall():
+            v = (r['v'] or '').replace(velho, novo).replace(velho_nome, novo_nome)
+            if tabela == 'properties':  # evita duplicar se as duas já existirem na lista de categorias
+                lista = pj(v, None)
+                if isinstance(lista, list):
+                    vistos = []
+                    for c in lista:
+                        if c not in vistos:
+                            vistos.append(c)
+                    v = j(vistos)
+            if v != r['v']:
+                conn.execute('UPDATE %s SET %s=? WHERE %s=?' % (tabela, coluna, chave), (v, r['k']))
+                n += 1
+    if n:
+        conn.commit()
+        print('[migração] módulo Cliente/Fornecedor renomeado para Produtos e Serviços (%d registro(s) ajustado(s)).' % n)
 
 
 # ------------------------------------------------------------ primeiro acesso (produção)
@@ -855,7 +884,7 @@ def criar_admin_inicial(conn):
                  (uid('u_'), nome, email, h, sl, 'admin', '[]', now_iso()))
     listas = {'categorias': [], 'categoriasReembolso': ['Alimentação hora extra', 'Alimentação com cliente', 'Alimentação em viagem', 'Hospedagem', 'Uber/Transporte', 'Motoboy', 'Combustível', 'Outro'],
               'fornecedores': [], 'setores': [], 'clientes': [], 'tiposCompra': ['Solicitação de Pagamento']}
-    listas['categorias'] = list(listas['categoriasReembolso']) + ['Cliente/Fornecedor']
+    listas['categorias'] = list(listas['categoriasReembolso']) + [CAT_PRODUTOS_SERVICOS]
     for k, v in listas.items():
         conn.execute('INSERT OR REPLACE INTO properties(chave,valor) VALUES(?,?)', (k, j(v)))
     conn.commit()
@@ -906,7 +935,7 @@ def seed_db(conn):
 
     props = seed.get('properties') or {}
     props.setdefault('categorias', [])
-    for c in ['Cliente/Fornecedor', 'Material de Escritório', 'Serviços Terceirizados', 'Manutenção Predial', 'Viagens e Deslocamentos',
+    for c in [CAT_PRODUTOS_SERVICOS, 'Material de Escritório', 'Serviços Terceirizados', 'Manutenção Predial', 'Viagens e Deslocamentos',
               'Software de Design', 'Banco de Imagens e Fontes', 'Freelancers', 'Equipamentos', 'Infraestrutura Cloud', 'Licenças de Desenvolvimento', 'Ferramentas SaaS']:
         if c not in props['categorias']:
             props['categorias'].append(c)
@@ -948,22 +977,22 @@ def seed_db(conn):
                     cat('adm_predial', 'Manutenção Predial', ['Manutenção Predial'], [('Reparos e manutenção', 40000)]),
                     cat('adm_viagens', 'Viagens e Deslocamentos', ['Viagens e Deslocamentos'], [('Passagens e hospedagem', 55000)]),
                     cat('adm_reemb', 'Reembolsos', reemb, [('Reembolsos de colaboradores', 30000)]),
-                    cat('adm_forn', 'Pagamentos a Clientes/Fornecedores', ['Cliente/Fornecedor'], [('Pagamentos diversos', 80000)])],
+                    cat('adm_forn', 'Pagamentos de Produtos e Serviços', [CAT_PRODUTOS_SERVICOS], [('Pagamentos diversos', 80000)])],
         'dep_cri': [cat('cri_design', 'Software de Design', ['Software de Design'], [('Adobe Creative Cloud', 42000), ('Figma / Canva', 9000)]),
                     cat('cri_bancos', 'Banco de Imagens e Fontes', ['Banco de Imagens e Fontes'], [('Shutterstock / Getty', 24000), ('Fontes e plugins', 6000)]),
                     cat('cri_free', 'Freelancers', ['Freelancers'], [('Ilustração e motion', 70000)]),
                     cat('cri_equip', 'Equipamentos', ['Equipamentos'], [('Monitores e mesas digitalizadoras', 35000)]),
                     cat('cri_reemb', 'Reembolsos', reemb, [('Reembolsos de colaboradores', 15000)]),
-                    cat('cri_forn', 'Pagamentos a Clientes/Fornecedores', ['Cliente/Fornecedor'], [('Gráficas e produção', 120000)])],
+                    cat('cri_forn', 'Pagamentos de Produtos e Serviços', [CAT_PRODUTOS_SERVICOS], [('Gráficas e produção', 120000)])],
         'dep_dev': [cat('dev_cloud', 'Infraestrutura Cloud', ['Infraestrutura Cloud'], [('AWS / Google Cloud', 90000), ('Domínios e CDN', 8000)]),
                     cat('dev_lic', 'Licenças de Desenvolvimento', ['Licenças de Desenvolvimento'], [('JetBrains / GitHub', 22000)]),
                     cat('dev_saas', 'Ferramentas SaaS', ['Ferramentas SaaS'], [('Monitoramento e CI/CD', 30000)]),
                     cat('dev_free', 'Freelancers', ['Freelancers'], [('Desenvolvedores externos', 110000)]),
                     cat('dev_reemb', 'Reembolsos', reemb, [('Reembolsos de colaboradores', 12000)]),
-                    cat('dev_forn', 'Pagamentos a Clientes/Fornecedores', ['Cliente/Fornecedor'], [('Pagamentos diversos', 45000)])],
+                    cat('dev_forn', 'Pagamentos de Produtos e Serviços', [CAT_PRODUTOS_SERVICOS], [('Pagamentos diversos', 45000)])],
     }
     ficticios['dep_rh'] = [cat('rh_free', 'Freelancers', ['Freelancers'], [('Profissionais autônomos', 60000)]),
-                           cat('rh_forn', 'Pagamentos a Clientes/Fornecedores', ['Cliente/Fornecedor'], [('Pagamentos diversos', 15000)]),
+                           cat('rh_forn', 'Pagamentos de Produtos e Serviços', [CAT_PRODUTOS_SERVICOS], [('Pagamentos diversos', 15000)]),
                            cat('rh_reemb', 'Reembolsos', reemb, [('Reembolsos de colaboradores', 8000)])]
     for did, cats in ficticios.items():
         conn.execute('INSERT INTO budgets(id,ano,departamento_id,dolar,rateio,categorias) VALUES(?,?,?,?,?,?)',
@@ -1164,7 +1193,7 @@ def gerar_recibo_pdf(conn, sol):
         y -= 15
     y -= 18
     tipo = sol['tipo']
-    titulo_sec = {'fornecedor': 'CLIENTE/FORNECEDOR', 'reembolso': 'REEMBOLSO', 'grupo': 'SOLICITAÇÃO DE PAGAMENTO — ' + grupo_nome(conn).upper(), 'freelancer': 'FREELANCER', 'rescisao': 'RESCISÃO'}[tipo]
+    titulo_sec = {'fornecedor': 'PRODUTOS E SERVIÇOS', 'reembolso': 'REEMBOLSO', 'grupo': 'SOLICITAÇÃO DE PAGAMENTO — ' + grupo_nome(conn).upper(), 'freelancer': 'FREELANCER', 'rescisao': 'RESCISÃO'}[tipo]
     ops.append(('text', L, y, 11.5, True, titulo_sec))
     y -= 22
 
@@ -1176,7 +1205,7 @@ def gerar_recibo_pdf(conn, sol):
     if tipo == 'fornecedor':
         campo(L, y, 'Título:', d.get('titulo')); y -= 15
         campo(L, y, 'Solicitante:', d.get('solicitante')); campo(col2, y, 'Departamento:', dep_nome, 90); y -= 15
-        campo(L, y, 'E-mail:', sol['email']); campo(col2, y, 'Nº de Referência:', d.get('numeroOcPi'), 90); y -= 15
+        campo(L, y, 'E-mail:', sol['email']); campo(col2, y, 'Nº do Pedido:', d.get('numeroOcPi'), 90); y -= 15
         campo(L, y, 'Fornecedor:', d.get('fornecedor')); campo(col2, y, 'Cliente:', d.get('cliente'), 90); y -= 15
         campo(L, y, 'Empresa:', d.get('empresa')); y -= 15
     elif tipo == 'reembolso':
@@ -1337,30 +1366,72 @@ def limpar_orfaos(horas=72):
         conn.close()
 
 
-def executar_alertas_nf(conn):
-    """Revisão diária (9h): freelancers encerrados sem NF. Avisa cada solicitante e manda um resumo ao Financeiro e ao RH."""
-    hoje = today_iso()
-    por_email, todos = {}, []
-    for r in conn.execute("SELECT * FROM solicitacoes WHERE tipo='freelancer' AND status='encerrada' AND (doc_fiscal IS NULL OR doc_fiscal='') ORDER BY id").fetchall():
+def _itens_nf_pendentes(conn):
+    """Pedidos encerrados SEM documento fiscal nos módulos com lembrete (Produtos e Serviços, Interno e Freelancer)."""
+    hoje, itens = dt.date.today(), []
+    for r in conn.execute("SELECT * FROM solicitacoes WHERE tipo IN ('fornecedor','grupo','freelancer') AND status='encerrada' AND (doc_fiscal IS NULL OR doc_fiscal='') ORDER BY id").fetchall():
         d = pj(r['dados'], {})
-        solic = conn.execute('SELECT email FROM users WHERE id=?', (r['solicitante_id'],)).fetchone()
-        para = r['email'] or (solic['email'] if solic else None)
-        fim = d.get('dataFim') or ''
-        item = {'numero': r['numero'], 'nome': d.get('nomeFreelancer') or '—', 'fim': fim, 'vencida': bool(fim) and fim < hoje, 'solicitante': r['solicitante_nome'] or '—'}
-        todos.append(item)
-        if para:
-            por_email.setdefault(para, []).append(item)
-    fmt = lambda i: '  • %s — %s — término %s%s' % (i['numero'], i['nome'], fmt_data(i['fim']), '  (PRAZO VENCIDO: você está bloqueado(a) de novas solicitações de Freelancer)' if i['vencida'] else '')
-    for para, itens in por_email.items():
-        enviar_email(para, 'NexarPay — Freelancer: Nota Fiscal pendente (%d)' % len(itens),
-                     'Bom dia.\n\nAs contratações de Freelancer abaixo ainda estão sem a Nota Fiscal anexada:\n\n%s\n\nAnexe a NF no sistema (%s). O bloqueio de novas solicitações de Freelancer termina assim que a NF for anexada.\n\nAtenciosamente\nNexarPay'
-                     % ('\n'.join(fmt(i) for i in itens), CONFIG.get('url_base')))
-    if todos:
-        resumo = '\n'.join(fmt(i) + ' · solicitante: ' + i['solicitante'] for i in todos)
-        for u in conn.execute("SELECT email FROM users WHERE ativo=1 AND (perfil='financeiro' OR (perfil='rh' AND (rh1=1 OR rh2=1)))"):
-            enviar_email(u['email'], 'NexarPay — Resumo diário: Freelancers sem Nota Fiscal (%d)' % len(todos),
-                         'Resumo da revisão diária das 9h:\n\n%s\n\nAtenciosamente\nNexarPay' % resumo)
-    return len(todos)
+        prazo = d.get('dataFim') if r['tipo'] == 'freelancer' else r['prazo_doc_fiscal']
+        try:
+            restam = (dt.date.fromisoformat(prazo) - hoje).days if prazo else 0
+        except Exception:
+            restam = 0
+        solic = conn.execute('SELECT nome,email FROM users WHERE id=?', (r['solicitante_id'],)).fetchone()
+        itens.append({'uid': r['solicitante_id'], 'numero': r['numero'], 'tipo': r['tipo'], 'modulo': TIPOS_SOLICITACAO.get(r['tipo'], r['tipo']), 'valor': r['valor'], 'prazo': prazo, 'restam': restam,
+                      'atraso': max(0, -restam), 'dep': r['departamento_id'], 'solicitante': r['solicitante_nome'] or (solic['nome'] if solic else '—'),
+                      'nome': (solic['nome'] if solic else '') or r['solicitante_nome'] or '', 'para': r['email'] or (solic['email'] if solic else None)})
+    return itens
+
+
+def _linha_nf(i):
+    sit = ('ATRASADO há %d dia(s)' % i['atraso']) if i['atraso'] > 0 else ('VENCE HOJE' if i['restam'] == 0 else 'faltam %d dia(s)' % i['restam'])
+    return '  • %s — %s — %s — prazo %s — %s' % (i['numero'], i['modulo'], fmt_brl(i['valor']), fmt_data(i['prazo']), sit)
+
+
+def executar_alertas_nf(conn, escalar=True):
+    """Lembretes do documento fiscal (padrão: 9h e 15h, todos os dias): desde o encerramento do pedido até a NF ser anexada.
+    Um e-mail por solicitante, reunindo todos os pedidos pendentes. Na primeira rodada do dia, pedidos com atraso a partir de N dias
+    (parâmetro) também vão, em resumo, para o Financeiro, para os Gestores do departamento e, nos Freelancers, para o RH."""
+    itens = _itens_nf_pendentes(conn)
+    cfg = doc_fiscal_cfg(conn)
+    url = CONFIG.get('url_base')
+    horarios = ' e '.join('%dh' % h for h in cfg['horarios'])
+    por_email = {}
+    for i in itens:
+        if i['para']:
+            por_email.setdefault(i['para'], []).append(i)
+    for para, lista in por_email.items():
+        atrasados = [i for i in lista if i['atraso'] > 0]
+        primeiro = (lista[0]['nome'] or '').split(' ')[0] or 'olá'
+        bloqueio = any(cfg['bloquear'].get(i['tipo'], 0) > 0 and i['atraso'] >= cfg['bloquear'][i['tipo']] for i in lista) and not liberado_doc_fiscal(conn, lista[0]['uid'])
+        assunto = ('NexarPay — URGENTE: documento fiscal em ATRASO (%d pendente(s))' if atrasados else 'NexarPay — AÇÃO NECESSÁRIA: envie o documento fiscal (%d pendente(s))') % len(lista)
+        corpo = ('ATENÇÃO, %s!\n\n'
+                 '%d pedido(s) seu(s) com pagamento autorizado ainda estão SEM DOCUMENTO FISCAL no NexarPay:\n\n%s\n\n'
+                 'O QUE FAZER (leva 1 minuto):\n'
+                 '  1) Acesse: %s\n'
+                 '  2) Abra o pedido e clique em "Anexar".\n'
+                 '  3) Envie a Nota Fiscal (PDF ou foto).\n\n'
+                 'Este lembrete chega todos os dias, às %s, até o documento ser anexado.%s\n\n'
+                 'Atenciosamente\nNexarPay') % (primeiro, len(lista), '\n'.join(_linha_nf(i) for i in lista), url, horarios,
+                                                 '\n\nATENÇÃO: há pedido(s) em atraso e seus NOVOS PEDIDOS estão BLOQUEADOS até o envio.' if bloqueio else '')
+        enviar_email(para, assunto, corpo)
+    if escalar and cfg['copiaAposDias'] > 0:
+        graves = [i for i in itens if i['atraso'] >= cfg['copiaAposDias']]
+        por_dest = {}
+        for i in graves:
+            dests = {u['email'] for u in conn.execute("SELECT email FROM users WHERE ativo=1 AND perfil='financeiro'")}
+            for u in conn.execute("SELECT email,departamentos FROM users WHERE ativo=1 AND perfil='gestor'"):
+                if i['dep'] in pj(u['departamentos'], []):
+                    dests.add(u['email'])
+            if i['tipo'] == 'freelancer':
+                dests |= {u['email'] for u in conn.execute("SELECT email FROM users WHERE ativo=1 AND perfil='rh' AND (rh1=1 OR rh2=1)")}
+            for em in dests:
+                por_dest.setdefault(em, []).append(i)
+        for em, lista in por_dest.items():
+            enviar_email(em, 'NexarPay — Resumo: %d pedido(s) com documento fiscal em atraso há %d dia(s) ou mais' % (len(lista), cfg['copiaAposDias']),
+                         'Os pedidos abaixo estão sem documento fiscal há %d dia(s) ou mais após o prazo:\n\n%s\n\nSolicite o envio ao responsável (ele já recebe lembretes diários). Acompanhe em %s\n\nAtenciosamente\nNexarPay'
+                         % (cfg['copiaAposDias'], '\n'.join(_linha_nf(i) + ' — solicitante: ' + i['solicitante'] for i in lista), url))
+    return len(itens)
 
 
 def executar_alertas_termino(conn):
@@ -1383,17 +1454,26 @@ def executar_alertas_termino(conn):
 def _loop_alertas_nf():
     while True:
         try:
-            if dt.datetime.now().hour >= 9:
-                conn = db()
-                try:
-                    if get_ajuste(conn, 'alertaNfData') != today_iso():
-                        n = executar_alertas_nf(conn)
-                        executar_alertas_termino(conn)
-                        set_ajuste(conn, 'alertaNfData', today_iso())
+            conn = db()
+            try:
+                cfg, agora = doc_fiscal_cfg(conn), dt.datetime.now()
+                vencidos = [h for h in cfg['horarios'] if agora.hour >= h]
+                if vencidos:  # uma rodada por horário; se o servidor ficou desligado, roda só a mais recente (sem e-mail em dobro)
+                    est = get_ajuste(conn, 'lembreteNf', {}) or {}
+                    if est.get('data') != today_iso():
+                        est = {'data': today_iso(), 'feitas': []}
+                    if max(vencidos) not in est['feitas']:
+                        n = executar_alertas_nf(conn, escalar=not est['feitas'])
+                        est['feitas'] = vencidos
+                        set_ajuste(conn, 'lembreteNf', est)
                         conn.commit()
-                        print('[freelancer] revisão diária das 9h: %d contratação(ões) sem NF.' % n)
-                finally:
-                    conn.close()
+                        print('[documento fiscal] lembretes das %dh: %d pedido(s) sem documento.' % (max(vencidos), n))
+                if agora.hour >= 9 and get_ajuste(conn, 'alertaTerminoData') != today_iso():
+                    executar_alertas_termino(conn)
+                    set_ajuste(conn, 'alertaTerminoData', today_iso())
+                    conn.commit()
+            finally:
+                conn.close()
         except Exception:
             traceback.print_exc()
         threading.Event().wait(300)
@@ -1412,14 +1492,14 @@ def _norm(v):
 
 def categoria_orcamento(tipo, d):
     if tipo == 'grupo':
-        return d.get('categoria') or 'Cliente/Fornecedor'
+        return d.get('categoria') or CAT_PRODUTOS_SERVICOS
     if tipo == 'reembolso':
         return d.get('categoriaDespesa') or 'Outro'
     if tipo == 'freelancer':
         return 'Freelancers'
     if tipo == 'rescisao':
         return 'Rescisões'
-    return 'Cliente/Fornecedor'
+    return CAT_PRODUTOS_SERVICOS
 
 
 def _aprovado_cat(cat):
@@ -1437,7 +1517,7 @@ def _duplicidades(conn, tipo, d, valor, anexos, excluir_id):
         if mesmo_valor and quem and r['tipo'] == tipo and quem == _norm(dd.get('fornecedor') or dd.get('nomeFreelancer') or dd.get('nome')):
             achados.setdefault(r['numero'], (r, []))[1].append('mesmo valor e mesmo fornecedor/beneficiário')
         if mesmo_valor and oc and oc == _norm(dd.get('numeroOcPi')):
-            achados.setdefault(r['numero'], (r, []))[1].append('mesmo Nº de OC/PI e mesmo valor')
+            achados.setdefault(r['numero'], (r, []))[1].append('mesmo Nº do Pedido e mesmo valor')
     ids = [a['id'] for a in anexos]
     if ids:
         ph = ','.join('?' * len(ids))
@@ -2459,10 +2539,6 @@ def validar_freelancer(user, d):
     di, df = dt.date.fromisoformat(ini), dt.date.fromisoformat(fim)
     if df < di:
         raise ApiError(400, 'A data de término não pode ser anterior à data de início.')
-    if (df - di).days > MAX_DIAS_FREELA:
-        raise ApiError(400, 'O período do freelancer não pode passar de %d dias (da data de início à data de término).' % MAX_DIAS_FREELA)
-    if df < dt.date.today() and user['perfil'] != 'diretor':
-        raise ApiError(403, 'Pedido com data de término anterior a hoje (retroativo) só pode ser feito pela Diretoria.')
     if not cnpj_valido(d.get('cpfCnpj')):
         raise ApiError(400, 'CNPJ inválido. Confira os 14 dígitos.')
     n = re.sub(r'\D', '', str(d['cpfCnpj']))
@@ -2484,24 +2560,77 @@ def validar_rh(rh, user):
     return {'contratado': rh['contratado'], 'dataContratacao': dc, 'dataOnboarding': do, 'por': user['nome'], 'em': now_iso()}
 
 
+def doc_fiscal_cfg(conn):
+    """Parâmetros do documento fiscal (tela Configurações): dias de atraso para bloquear novos pedidos por módulo (0 = nunca),
+    dias de atraso para copiar Gestor e Financeiro nos lembretes e horários dos lembretes diários."""
+    cfg = get_ajuste(conn, 'docFiscal', None) or {}
+    out = {'bloquear': dict(DOC_FISCAL_PADRAO['bloquear']), 'copiaAposDias': DOC_FISCAL_PADRAO['copiaAposDias'], 'horarios': list(DOC_FISCAL_PADRAO['horarios'])}
+
+    def inteiro(v, padrao, minimo, maximo):
+        try:
+            return max(minimo, min(maximo, int(v)))
+        except Exception:
+            return padrao
+    b = cfg.get('bloquear') if isinstance(cfg.get('bloquear'), dict) else {}
+    for k in out['bloquear']:
+        out['bloquear'][k] = inteiro(b.get(k), out['bloquear'][k], 0, 365)
+    out['copiaAposDias'] = inteiro(cfg.get('copiaAposDias'), out['copiaAposDias'], 0, 365)
+    hs = cfg.get('horarios')
+    if isinstance(hs, list) and hs:
+        out['horarios'] = sorted({inteiro(h, 9, 0, 23) for h in hs})[:4]
+    return out
+
+
+def liberado_doc_fiscal(conn, user_id):
+    """Liberação pontual (Financeiro/Administrador) do bloqueio por documento fiscal, com data limite."""
+    lib = (get_ajuste(conn, 'docFiscalLiberacoes', {}) or {}).get(user_id)
+    return bool(lib and (lib.get('ate') or '') >= today_iso())
+
+
+def _dias_de_atraso(prazo_iso):
+    try:
+        return max(0, (dt.date.today() - dt.date.fromisoformat(prazo_iso)).days) if prazo_iso else 0
+    except Exception:
+        return 0
+
+
 def bloqueio_freelancer(conn, user_id):
-    """Quem tem contratação de freelancer encerrada, já terminada e sem NF anexada fica impedido de nova solicitação de Freelancer."""
-    hoje, pend, venc = today_iso(), [], []
+    """Bloqueio de novo pedido de Freelancer por falta de NF: só vale se o parâmetro de dias de atraso estiver ligado (padrão: desligado)."""
+    n = doc_fiscal_cfg(conn)['bloquear']['freelancer']
+    pend, venc = [], []
     for r in conn.execute("SELECT id,numero,dados FROM solicitacoes WHERE solicitante_id=? AND tipo='freelancer' AND status='encerrada' AND (doc_fiscal IS NULL OR doc_fiscal='')", (user_id,)):
         d = pj(r['dados'], {})
-        item = {'id': r['id'], 'numero': r['numero'], 'nome': d.get('nomeFreelancer'), 'dataFim': d.get('dataFim')}
+        atraso = _dias_de_atraso(d.get('dataFim'))
+        item = {'id': r['id'], 'numero': r['numero'], 'nome': d.get('nomeFreelancer'), 'dataFim': d.get('dataFim'), 'atraso': atraso}
         pend.append(item)
-        if (d.get('dataFim') or '9999-12-31') < hoje:
+        if n > 0 and atraso >= n:
             venc.append(item)
-    return {'bloqueado': bool(venc), 'vencidas': venc, 'pendentes': pend, 'mensagem': MSG_BLOQUEIO_FREELA if venc else None}
+    bloq = bool(venc) and not liberado_doc_fiscal(conn, user_id)
+    return {'bloqueado': bloq, 'vencidas': venc if bloq else [], 'pendentes': pend, 'mensagem': MSG_BLOQUEIO_FREELA if bloq else None}
 
 
 def pendencias_doc_fiscal(conn, user_id):
-    hoje = today_iso()
+    """Documentos fiscais pendentes do solicitante. O bloqueio de novos pedidos depende do parâmetro de cada módulo
+    (dias de atraso; 0 = nunca bloqueia). Reembolso mantém o bloqueio a partir de 1 dia de atraso."""
+    cfg = doc_fiscal_cfg(conn)['bloquear']
     rows = conn.execute("SELECT id,numero,tipo,prazo_doc_fiscal FROM solicitacoes WHERE solicitante_id=? AND tipo NOT IN ('freelancer','rescisao') AND status='encerrada' AND (doc_fiscal IS NULL OR doc_fiscal='')", (user_id,)).fetchall()
-    venc = [{'id': r['id'], 'numero': r['numero'], 'tipo': r['tipo'], 'prazo': r['prazo_doc_fiscal']} for r in rows if r['prazo_doc_fiscal'] and r['prazo_doc_fiscal'] < hoje]
-    pend = [{'id': r['id'], 'numero': r['numero'], 'tipo': r['tipo'], 'prazo': r['prazo_doc_fiscal']} for r in rows]
-    return {'bloqueado': len(venc) > 0, 'vencidas': venc, 'pendentes': pend, 'mensagem': MSG_BLOQUEIO if venc else None}
+    pend = [{'id': r['id'], 'numero': r['numero'], 'tipo': r['tipo'], 'prazo': r['prazo_doc_fiscal'], 'atraso': _dias_de_atraso(r['prazo_doc_fiscal'])} for r in rows]
+    venc = [p for p in pend if cfg.get(p['tipo'], 0) > 0 and p['atraso'] >= cfg[p['tipo']]]
+    bloq = bool(venc) and not liberado_doc_fiscal(conn, user_id)
+    return {'bloqueado': bloq, 'vencidas': venc if bloq else [], 'pendentes': pend, 'mensagem': MSG_BLOQUEIO if bloq else None}
+
+
+def aviso_consequencia_nf(conn, tipo):
+    """Frase dos e-mails sobre lembretes e bloqueio, conforme os parâmetros atuais."""
+    cfg = doc_fiscal_cfg(conn)
+    n, partes = cfg['bloquear'].get(tipo, 0), []
+    if tipo in TIPOS_LEMBRETE_NF:
+        partes.append('Você receberá um lembrete por e-mail %s por dia (%s) até o documento ser anexado.' % ('%d vezes' % len(cfg['horarios']) if len(cfg['horarios']) > 1 else 'uma vez', ' e '.join('%dh' % h for h in cfg['horarios'])))
+    if n == 1:
+        partes.append('Vencido o prazo, novas solicitações ficam bloqueadas.')
+    elif n > 1:
+        partes.append('Com %d dias de atraso, novas solicitações ficam bloqueadas.' % n)
+    return ' '.join(partes)
 
 
 def proximo_numero(conn):
@@ -2524,18 +2653,18 @@ CAMPOS_OBRIGATORIOS = {
 def validar_solicitacao(conn, user, body):
     tipo = body.get('tipo')
     if tipo == 'fornecedor' and user['perfil'] == 'rh':
-        raise ApiError(403, 'O módulo Cliente/Fornecedor não está disponível para o perfil RH.')
+        raise ApiError(403, 'O módulo Produtos e Serviços não está disponível para o perfil RH.')
     if tipo not in TIPOS_SOLICITACAO:
         raise ApiError(400, 'Tipo de solicitação inválido.')
     d = body.get('dados') or {}
-    if tipo == 'fornecedor' and isinstance(d.get('referencias'), list):  # Nº de Referência: vários (OC, PI, PC, PO, OP, OS…); numeroOcPi guarda a lista em texto
+    if tipo == 'fornecedor' and isinstance(d.get('referencias'), list):  # Nº do Pedido: vários (OC, PI, PC, PO, OP, OS…); numeroOcPi guarda a lista em texto
         refs = []
         for x in d['referencias']:
             x = re.sub(r'\s+', ' ', str(x or '')).strip()[:60]
             if x and x not in refs:
                 refs.append(x)
         if len(refs) > 30:
-            raise ApiError(400, 'Informe no máximo 30 números de referência.')
+            raise ApiError(400, 'Informe no máximo 30 números de pedido.')
         d['referencias'] = refs
         d['numeroOcPi'] = ', '.join(refs)
     faltando = [c for c in CAMPOS_OBRIGATORIOS[tipo] if d.get(c) in (None, '', [])]
@@ -2843,6 +2972,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.api_backup(conn, user, method, parts, body)
         if parts[0] == 'email':
             return self.api_email(conn, user, method, parts, body)
+        if parts[0] == 'docfiscal':
+            return self.api_docfiscal(conn, user, method, parts, body)
         if parts[0] == 'empresas':
             return self.api_empresas(conn, user, method, parts, body)
         if parts[0] == 'anos':
@@ -3222,7 +3353,7 @@ class Handler(BaseHTTPRequestHandler):
             'empresas': empresas_lista(conn), 'grupoNome': grupo_nome(conn),
             'anosFechados': [r['ano'] for r in conn.execute('SELECT ano FROM anos_fechados ORDER BY ano')],
             'users': users_light, 'perfis': PERFIS, 'tiposSolicitacao': TIPOS_SOLICITACAO, 'statusLabel': STATUS_LABEL,
-            'config': {'demo': DEMO_MODE, 'dominio': CONFIG.get('dominio_permitido'), 'prazosDocFiscal': PRAZO_DOC_FISCAL, 'maxUploadMB': MAX_UPLOAD_MB,
+            'config': {'demo': DEMO_MODE, 'dominio': CONFIG.get('dominio_permitido'), 'prazosDocFiscal': PRAZO_DOC_FISCAL, 'maxUploadMB': MAX_UPLOAD_MB, 'docFiscal': doc_fiscal_cfg(conn),
                        'emailModo': (CONFIG.get('email') or {}).get('modo'), 'reenvioParaAprovacao1': bool(CONFIG.get('reenvio_retorna_para_aprovacao1', True))},
             'trava': pendencias_doc_fiscal(conn, user['id']), 'travaFreelancer': bloqueio_freelancer(conn, user['id']),
         })
@@ -3692,6 +3823,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.sol_doc_fiscal(conn, user, r, body)
         if method == 'POST' and len(parts) == 4 and parts[2] == 'doc-fiscal' and parts[3] == 'remover':
             return self.sol_doc_fiscal_remover(conn, user, r, body)
+        if method == 'POST' and len(parts) == 3 and parts[2] == 'liberar-solicitante':
+            return self.sol_liberar_solicitante(conn, user, r, body)
         raise ApiError(404, 'Rota não encontrada.')
 
     def anexos_validos(self, conn, user, lista, manter=()):
@@ -3959,12 +4092,11 @@ class Handler(BaseHTTPRequestHandler):
                 corpo = ('A solicitação de Rescisão %s foi ENCERRADA pelo Financeiro e o pagamento está autorizado. O Recibo de Aprovação segue em anexo.\n\n%s\n\nAtenciosamente\nNexarPay') % (r['numero'], resumo)
             elif r['tipo'] == 'freelancer':
                 corpo = ('Sua solicitação de Freelancer %s foi ENCERRADA %s e o pagamento está autorizado. O Recibo de Aprovação segue em anexo.\n\n%s\n\n'
-                         'ATENÇÃO: anexe %s no sistema até o fim da contratação (%s). Depois dessa data, sem a NF, você fica bloqueado(a) de fazer novas solicitações de Freelancer. '
-                         'O sistema envia um lembrete todos os dias às 9h enquanto a NF não for anexada.\n\nAtenciosamente\nNexarPay') % (r['numero'], quem, resumo, doc, fmt_data(prazo))
+                         'ATENÇÃO: anexe %s no sistema (prazo: fim da contratação, %s). %s\n\nAtenciosamente\nNexarPay') % (r['numero'], quem, resumo, doc, fmt_data(prazo), aviso_consequencia_nf(conn, 'freelancer'))
             else:
                 corpo = ('Sua Solicitação de Pagamento %s foi ENCERRADA pelo Financeiro e o pagamento está autorizado. O Recibo de Aprovação segue em anexo.\n\n%s\n\n'
-                         'ATENÇÃO: você tem %d dia(s) corrido(s) (até %s) para anexar %s no sistema. Após esse prazo, novas solicitações ficam bloqueadas.\n\n'
-                         'Atenciosamente\nNexarPay') % (r['numero'], resumo, PRAZO_DOC_FISCAL.get(r['tipo'], 3), fmt_data(prazo), doc)
+                         'ATENÇÃO: você tem %d dia(s) corrido(s) (até %s) para anexar %s no sistema. %s\n\n'
+                         'Atenciosamente\nNexarPay') % (r['numero'], resumo, PRAZO_DOC_FISCAL.get(r['tipo'], 3), fmt_data(prazo), doc, aviso_consequencia_nf(conn, r['tipo']))
             if para:
                 enviar_email(para, 'NexarPay — Pagamento autorizado — Recibo %s' % r['numero'], corpo, os.path.join(RECIBO_DIR, recibo) if recibo else None)
         elif acao == 'alterar' and etapa in (1, 2, ETAPA_RH, ETAPA_FISCAL):
@@ -4077,16 +4209,68 @@ class Handler(BaseHTTPRequestHandler):
         self.audit(conn, user, 'solicitacao.doc_fiscal_removido', r['numero'], {'arquivo': antigo.get('nome'), 'justificativa': just})
         if r['email']:
             enviar_email(r['email'], 'NexarPay — Nota Fiscal removida pelo Financeiro (%s)' % r['numero'],
-                         'O Financeiro removeu a Nota Fiscal anexada à solicitação %s.\n\nMotivo: %s\n\nAnexe a NF correta no sistema. Enquanto não houver NF anexada e a contratação já tiver terminado, '
-                         'novas solicitações de Freelancer ficam bloqueadas.\n\nAtenciosamente\nNexarPay' % (r['numero'], just))
+                         'O Financeiro removeu a Nota Fiscal anexada à solicitação %s.\n\nMotivo: %s\n\nAnexe a NF correta no sistema. %s\n\nAtenciosamente\nNexarPay' % (r['numero'], just, aviso_consequencia_nf(conn, 'freelancer')))
         return self.send_json({'solicitacao': sol_out(conn, conn.execute('SELECT * FROM solicitacoes WHERE id=?', (r['id'],)).fetchone(), True)})
+
+    def sol_liberar_solicitante(self, conn, user, r, body):
+        """Liberação pontual: o Financeiro ou o Administrador destrava, por alguns dias, os novos pedidos de quem está bloqueado por documento fiscal."""
+        if user['perfil'] not in ('admin', 'financeiro'):
+            raise ApiError(403, 'Somente o Financeiro ou o Administrador podem liberar o solicitante.')
+        just = (body.get('justificativa') or '').strip()
+        if len(just) < 5:
+            raise ApiError(400, 'Justifique a liberação (mínimo de 5 caracteres).')
+        try:
+            dias = int(body.get('dias'))
+        except Exception:
+            raise ApiError(400, 'Informe por quantos dias liberar.')
+        if not (1 <= dias <= 30):
+            raise ApiError(400, 'A liberação vale de 1 a 30 dias.')
+        ate = (dt.date.today() + dt.timedelta(days=dias)).isoformat()
+        libs = get_ajuste(conn, 'docFiscalLiberacoes', {}) or {}
+        libs = {k: v for k, v in libs.items() if (v.get('ate') or '') >= today_iso()}  # limpa as vencidas
+        libs[r['solicitante_id']] = {'ate': ate, 'por': user['nome'], 'motivo': just, 'em': now_iso()}
+        set_ajuste(conn, 'docFiscalLiberacoes', libs)
+        add_hist(conn, r['id'], user, 'liberacao_solicitante', None, just, {'ate': ate, 'dias': dias})
+        conn.commit()
+        self.audit(conn, user, 'doc_fiscal.liberacao', r['numero'], {'solicitante': r['solicitante_nome'], 'ate': ate, 'justificativa': just})
+        return self.send_json({'ok': True, 'ate': ate})
+
+    def api_docfiscal(self, conn, user, method, parts, body):
+        self.require_user(conn, ['admin'])
+        if len(parts) == 2 and parts[1] == 'config' and method == 'GET':
+            return self.send_json({'config': doc_fiscal_cfg(conn), 'prazos': PRAZO_DOC_FISCAL})
+        if len(parts) == 2 and parts[1] == 'config' and method == 'PUT':
+            self.exige_reauth(conn, user)
+            antes = doc_fiscal_cfg(conn)
+            novo = {'bloquear': {}, 'copiaAposDias': body.get('copiaAposDias'), 'horarios': antes['horarios']}
+            for k in DOC_FISCAL_PADRAO['bloquear']:
+                v = (body.get('bloquear') or {}).get(k)
+                try:
+                    n = int(v)
+                except Exception:
+                    raise ApiError(400, 'Informe os dias de atraso como número inteiro (0 = nunca bloquear).')
+                if not (0 <= n <= 365):
+                    raise ApiError(400, 'Os dias de atraso vão de 0 a 365.')
+                novo['bloquear'][k] = n
+            try:
+                c = int(novo['copiaAposDias'])
+            except Exception:
+                raise ApiError(400, 'Informe os dias para copiar Gestor e Financeiro como número inteiro (0 = não copiar).')
+            if not (0 <= c <= 365):
+                raise ApiError(400, 'Os dias para copiar vão de 0 a 365.')
+            novo['copiaAposDias'] = c
+            set_ajuste(conn, 'docFiscal', novo)
+            conn.commit()
+            self.audit(conn, user, 'doc_fiscal.config_alterada', 'documento fiscal', {'de': antes, 'para': doc_fiscal_cfg(conn)})
+            return self.send_json({'config': doc_fiscal_cfg(conn)})
+        raise ApiError(404, 'Rota não encontrada.')
 
     def criar_lancamento(self, conn, r):
         """Solicitação encerrada vira um lançamento do departamento (abate do orçamento)."""
         d = pj(r['dados'], {})
         tipo = r['tipo']
         if tipo == 'grupo':
-            categoria = d.get('categoria') or 'Cliente/Fornecedor'
+            categoria = d.get('categoria') or CAT_PRODUTOS_SERVICOS
         elif tipo == 'reembolso':
             categoria = d.get('categoriaDespesa') or 'Outro'
         elif tipo == 'freelancer':
@@ -4094,7 +4278,7 @@ class Handler(BaseHTTPRequestHandler):
         elif tipo == 'rescisao':
             categoria = 'Rescisões'
         else:
-            categoria = 'Cliente/Fornecedor'
+            categoria = CAT_PRODUTOS_SERVICOS
         props = pj(conn.execute("SELECT valor FROM properties WHERE chave='categorias'").fetchone()['valor'], [])
         if categoria not in props:
             props.append(categoria)

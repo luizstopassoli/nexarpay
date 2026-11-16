@@ -24,6 +24,7 @@
   --text-faint:    #6d6d7d;
 
   /* ---- categorical (validated order: blue, orange, aqua, yellow, magenta, green, violet, red) ---- */
+  --alert: #ff5568;  /* vermelho de alerta (pontos de ação pendente) */
   --c1: #3987e5;   /* blue    */
   --c2: #d95926;   /* orange  */
   --c3: #199e70;   /* aqua    */
@@ -80,6 +81,7 @@
   --text-dim:      #5b5b6d;
   --text-faint:    #8b8b9c;
 
+  --alert: #e5384a;
   --c1: #2a78d6;
   --c2: #eb6834;
   --c3: #1baf7a;
@@ -776,7 +778,7 @@ body:not(.perfil-admin) .scenario-radio{ pointer-events:none; cursor:default; op
 .pref-label{ flex:0 0 140px; color:var(--text-dim); }
 .pref-value{ font-weight:600; word-break:break-word; }
 
-/* Nº de Referência (Cliente/Fornecedor): campo + botão Adicionar e etiquetas removíveis */
+/* Nº do Pedido (Produtos e Serviços): campo + botão Adicionar e etiquetas removíveis */
 .ref-add{ display:flex; gap:8px; align-items:stretch; }
 .ref-add .input{ flex:1; min-width:0; }
 .ref-list{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
@@ -830,3 +832,11 @@ body:not(.perfil-admin) .scenario-radio{ pointer-events:none; cursor:default; op
 .kb-lane-cards{ display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:12px; margin-top:12px; }
 .kb-lane-cards .kb-card{ margin-bottom:0; }
 .st-fiscal{ color:#F97316; background:color-mix(in srgb, #F97316 16%, transparent); }
+
+/* Ponto de ação pendente (estilo notificação), no menu lateral */
+.nav-dot{ width:9px; height:9px; border-radius:50%; background:var(--alert); flex:none; margin-left:auto; box-shadow:0 0 0 3px color-mix(in srgb, var(--alert) 24%, transparent); animation:navDotPulse 2.6s ease-out infinite; }
+.nav-group-toggle .nav-dot{ margin-left:0; margin-right:10px; }
+@keyframes navDotPulse{ 0%{ box-shadow:0 0 0 0 color-mix(in srgb, var(--alert) 55%, transparent); } 70%{ box-shadow:0 0 0 7px color-mix(in srgb, var(--alert) 0%, transparent); } 100%{ box-shadow:0 0 0 0 color-mix(in srgb, var(--alert) 0%, transparent); } }
+@media (prefers-reduced-motion: reduce){ .nav-dot{ animation:none; } }
+/* Acesso Rápido: contagem em aberto em vermelho quando há pedidos */
+.qa-count.alerta{ color:var(--alert); font-weight:700; }

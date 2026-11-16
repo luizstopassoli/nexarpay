@@ -6,8 +6,8 @@ async function renderConfiguracoes() {
   const el = document.getElementById('page-configuracoes');
   el.innerHTML = `<div class="empty-state">${ICONS.clock}<h4>Carregando…</h4></div>`;
   try {
-    const [u, l, sm] = await Promise.all([api('GET', '/users'), api('GET', '/email/log'), api('GET', '/email/config')]);
-    cfgState.smtp = sm.config;
+    const [u, l, sm, df] = await Promise.all([api('GET', '/users'), api('GET', '/email/log'), api('GET', '/email/config'), api('GET', '/docfiscal/config')]);
+    cfgState.smtp = sm.config; cfgState.docFiscal = df.config; cfgState.prazos = df.prazos;
     cfgState.users = u.users; cfgState.emailLog = l.log; cfgState.emailModo = l.modo;
   } catch (e) { el.innerHTML = emptyState('alert', 'Não foi possível carregar', e.message); return; }
   if (currentPage !== 'configuracoes') return;
@@ -50,6 +50,18 @@ async function renderConfiguracoes() {
     </div>
 
     <div class="settings-block anim-in">
+      <div class="section-title-row" style="margin-top:0;"><h2 style="font-size:14px;">Documento fiscal: lembretes e bloqueio</h2></div>
+      <div class="card" style="padding:20px 22px;">
+        <p class="form-hint" style="margin:0 0 14px;">Produtos e Serviços, Interno e Freelancer recebem lembretes por e-mail às ${cfgState.docFiscal.horarios.map(h => h + 'h').join(' e ')}, todos os dias, desde o encerramento do pedido até o documento ser anexado. Reembolso e Rescisões seguem as regras próprias.</p>
+        <div class="table-scroll"><table class="data-table"><thead><tr><th>Módulo</th><th>Prazo do documento</th><th>Bloquear novos pedidos após (dias de atraso)</th></tr></thead><tbody>
+          ${[['fornecedor', 'Produtos e Serviços', (cfgState.prazos.fornecedor || 3) + ' dias'], ['grupo', 'Interno', (cfgState.prazos.grupo || 7) + ' dias'], ['freelancer', 'Freelancer', 'fim da contratação'], ['reembolso', 'Reembolso', (cfgState.prazos.reembolso || 1) + ' dia']].map(([k, nome, prazo]) => `<tr><td class="cell-strong">${nome}</td><td class="cell-dim">${prazo}</td><td><input class="input" type="number" min="0" max="365" data-df-bloq="${k}" value="${cfgState.docFiscal.bloquear[k]}" style="width:110px;"/> <span class="form-hint">0 = nunca bloqueia</span></td></tr>`).join('')}
+        </tbody></table></div>
+        <div style="display:flex; align-items:center; gap:10px; margin-top:14px; flex-wrap:wrap;"><label style="font-size:13px;">Copiar Gestor e Financeiro (e RH, no Freelancer) após</label><input class="input" type="number" min="0" max="365" id="dfCopia" value="${cfgState.docFiscal.copiaAposDias}" style="width:90px;"/><span class="form-hint">dias de atraso (0 = não copiar)</span></div>
+        <div style="margin-top:16px;"><button class="btn btn-primary btn-sm" id="dfSalvar">${ICONS.check}Salvar</button> <span class="form-hint" style="margin-left:8px;">Com 0, ninguém é bloqueado: só recebe os lembretes. O Financeiro e o Administrador ainda podem liberar um solicitante pontualmente.</span></div>
+      </div>
+    </div>
+
+    <div class="settings-block anim-in">
       <div class="section-title-row" style="margin-top:0;"><h2 style="font-size:14px;">Backup de Dados</h2></div>
       <div class="grid grid-3">
         <div class="card kpi hoverable"><div class="kpi-top"><span class="kpi-label">Exportar</span><div class="kpi-ico" style="background:color-mix(in srgb, ${cssVar('--c1')} 18%, transparent); color:${cssVar('--c1')};">${ICONS.download}</div></div>
@@ -78,6 +90,11 @@ async function renderConfiguracoes() {
   el.querySelectorAll('[data-del-user]').forEach(b => b.addEventListener('click', () => deleteUser(b.dataset.delUser)));
   el.querySelectorAll('[data-email]').forEach(tr => tr.addEventListener('click', async () => { try { const r = (await api('GET', `/email/ver/${tr.dataset.email}`)).email; openModal(`<div class="modal-head"><h3>${modalIcon('mail')} ${escapeHtml(r.assunto)}</h3><button class="modal-close" data-close-modal>${ICONS.x}</button></div><div class="modal-body"><p class="cell-dim" style="font-size:12px;">Para: ${escapeHtml(r.para)} · ${fmtDateTime(r.data)} · ${r.status}${r.erro ? ' — ' + escapeHtml(r.erro) : ''}${r.anexo ? ' · anexo: ' + escapeHtml(r.anexo.split('/').pop()) : ''}</p><pre style="white-space:pre-wrap; font-family:inherit; font-size:13px; margin-top:12px; background:var(--card-alt); padding:14px; border-radius:10px;">${escapeHtml(r.corpo)}</pre></div><div class="modal-foot"><button class="btn" data-close-modal>Fechar</button></div>`, { size: 'lg' }); } catch (e) { toast(e.message, 'error'); } }));
   document.getElementById('smtpCfgBtn').addEventListener('click', () => smtpDialog());
+  document.getElementById('dfSalvar').addEventListener('click', async () => {
+    const bloquear = {}; document.querySelectorAll('[data-df-bloq]').forEach(i => { bloquear[i.dataset.dfBloq] = Number(i.value); });
+    try { const r = await api('PUT', '/docfiscal/config', { bloquear, copiaAposDias: Number(document.getElementById('dfCopia').value) }); cfgState.docFiscal = r.config; DB.config.docFiscal = r.config; toast('Parâmetros do documento fiscal salvos.', 'success'); }
+    catch (e) { toast(e.message, 'error'); }
+  });
   document.getElementById('emailTesteBtn').addEventListener('click', async () => { const b = document.getElementById('emailTesteBtn'); b.disabled = true; try { const r = await api('POST', '/email/teste', { para: document.getElementById('emailTestePara').value }); toast(r.status === 'enviado' ? 'E-mail de teste enviado.' : r.status === 'simulado' ? 'Modo simulado: e-mail registrado no log (não enviado).' : 'Falha: ' + (r.erro || ''), r.status === 'erro' ? 'error' : 'success'); renderConfiguracoes(); } catch (e) { toast(e.message, 'error'); b.disabled = false; } });
   document.getElementById('cfgImportInput').addEventListener('change', async (e) => {
     const file = e.target.files[0]; if (!file) return;

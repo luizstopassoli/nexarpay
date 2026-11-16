@@ -69,7 +69,7 @@ No cadastro de cada usuário (Configurações) definem-se os **departamentos** e
 
 ## Solicitações de pagamento
 
-Botão **NOVA SOLICITAÇÃO** → tipo **CLIENTE/FORNECEDOR**, **REEMBOLSO** ou **GRUPO GPAC**, cada um com seu formulário (campos obrigatórios marcados com *, valor com máscara R$, anexos PDF/DOCX/XLSX/PNG/JPEG até 20 MB; no Reembolso o recibo/nota é obrigatório).
+Botão **NOVA SOLICITAÇÃO** → tipo **PRODUTOS E SERVIÇOS**, **REEMBOLSO** ou **GRUPO GPAC**, cada um com seu formulário (campos obrigatórios marcados com *, valor com máscara R$, anexos PDF/DOCX/XLSX/PNG/JPEG até 20 MB; no Reembolso o recibo/nota é obrigatório).
 
 Fluxo: **Solicitação → Aprovação 1 (Diretor 1) → Aprovação 2 (Diretor 2) → Financeiro → Encerrado.**
 
@@ -88,7 +88,7 @@ Menu **Relatórios** (Admin, Diretoria, Financeiro, Gestor e RH; Colaborador e D
 
 "Realizado" = solicitação encerrada pelo Financeiro; o ano vem da data de pagamento. Cada relatório sai em tela, **Excel (.xlsx)** e **PDF**, e pode ser **enviado por e-mail** (para você e até 5 e-mails do domínio) ou **agendado todo mês** (use períodos relativos como "Mês anterior"). Cada usuário pode **salvar filtros** (com as colunas escolhidas); o Administrador define as **colunas padrão do cliente** por relatório. Exportações, envios e agendamentos ficam na auditoria; os arquivos temporários dos e-mails ficam em `data/relatorios/` e são apagados após 2 dias. `python3 server.py --relatorios-agendados` roda os envios agendados na hora.
 
-**Módulo Freelancer** (autônomos, até 31 dias): **Solicitação → Aprovação 1 → Aprovação 2 → RH → Financeiro → Encerrado.** Término anterior a hoje: só a Diretoria faz o pedido. A NF deve ser anexada até a data de término; depois disso, sem NF, o solicitante fica bloqueado de novos pedidos de Freelancer (o Financeiro pode remover a NF e reativar o bloqueio). O sistema revisa as NFs pendentes todos os dias às 9h e avisa por e-mail (`python3 server.py --alertas-nf` executa a revisão na hora).
+**Módulo Freelancer** (profissionais autônomos, sem limite de período e com datas retroativas permitidas): **Solicitação → Aprovação 1 → Aprovação 2 → RH → Financeiro → Encerrado.** A NF deve ser anexada até a data de término. O sistema envia lembretes por e-mail às 9h e às 15h, todos os dias, desde o encerramento até a NF ser anexada (`python3 server.py --alertas-nf` executa a rodada na hora). O Financeiro pode remover a NF anexada.
 
 - **Aprovar** avança a etapa. **Alterar** e **Reprovar** exigem justificativa (registrada no histórico e enviada ao solicitante).
 - **Alterar** devolve ao solicitante; ao reenviar, a solicitação volta para a **Aprovação 1** (conforme o fluxograma). Para voltar à etapa que pediu a alteração, use `"reenvio_retorna_para_aprovacao1": false` no `config.json`.
@@ -97,9 +97,9 @@ Menu **Relatórios** (Admin, Diretoria, Financeiro, Gestor e RH; Colaborador e D
 - Cada solicitação mostra a **barra de status** (5 etapas, com nome e data de quem movimentou) e o **histórico completo**.
 - Ao **encerrar** (Financeiro): gera o **Recibo de Aprovação (PDF)**, envia por e-mail ao solicitante, **cria o lançamento** no departamento (abatendo do orçamento) e abre o prazo do documento fiscal.
 
-**Documento fiscal após o encerramento** — GRUPO GPAC: 7 dias corridos (Nota Fiscal ou Invoice) · CLIENTE/FORNECEDOR: 3 dias (Nota Fiscal ou Recibo Fiscal) · REEMBOLSO: 1 dia (Nota, Cupom Fiscal ou Recibo). Vencido o prazo sem anexo, o solicitante fica **bloqueado** para novas solicitações com a mensagem *"Atenção!!! Bloqueio devido a falta do envio do documento fiscal. Verifique seus lançamentos já aprovados"* até anexar.
+**Documento fiscal após o encerramento** — GRUPO GPAC: 7 dias corridos (Nota Fiscal ou Invoice) · PRODUTOS E SERVIÇOS: 3 dias (Nota Fiscal ou Recibo Fiscal) · REEMBOLSO: 1 dia (Nota, Cupom Fiscal ou Recibo). **Lembretes:** Produtos e Serviços, Interno e Freelancer recebem e-mail às 9h e às 15h, todos os dias, desde o encerramento até o documento ser anexado (um e-mail por pessoa, reunindo os pedidos pendentes). Após N dias de atraso (parâmetro, padrão 3), Gestor do departamento, Financeiro (e RH, nos Freelancers) recebem um resumo. **Bloqueio de novos pedidos:** é parametrizável em *Configurações → Documento fiscal*, por módulo, em dias de atraso (**0 = nunca bloqueia**). Padrão: Produtos e Serviços, Interno e Freelancer sem bloqueio; **Reembolso bloqueia a partir de 1 dia de atraso** (mensagem *"Atenção!!! Bloqueio devido a falta do envio do documento fiscal. Verifique seus lançamentos já aprovados"*). O Financeiro e o Administrador podem **liberar um solicitante por 1 a 30 dias**, com justificativa registrada (botão no pedido com o documento em atraso).
 
-Como o gasto entra no orçamento: GRUPO GPAC usa a **Categoria** escolhida; REEMBOLSO usa a **Categoria da Despesa**; CLIENTE/FORNECEDOR entra na categoria de lançamento **"Cliente/Fornecedor"**. Em *Orçamento → editar categoria* vincula-se cada categoria orçamentária às categorias de lançamento.
+Como o gasto entra no orçamento: GRUPO GPAC usa a **Categoria** escolhida; REEMBOLSO usa a **Categoria da Despesa**; PRODUTOS E SERVIÇOS entra na categoria de lançamento **"Produtos e Serviços"**. Em *Orçamento → editar categoria* vincula-se cada categoria orçamentária às categorias de lançamento.
 
 ## Orçamento por departamento e dashboards
 

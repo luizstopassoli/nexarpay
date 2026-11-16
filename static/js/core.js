@@ -158,7 +158,7 @@ async function reloadLaunches() { DB.launches = (await api('GET', '/launches')).
 async function reloadBudgets() { DB.budgets = (await api('GET', '/budgets')).budgets; }
 async function reloadProperties() { DB.properties = (await api('GET', '/properties')).properties; }
 async function reloadDepartamentos() { DB.departamentos = (await api('GET', '/departamentos')).departamentos; }
-async function reloadSolicitacoes() { const d = await api('GET', '/solicitacoes'); DB.solicitacoes = d.solicitacoes; DB.trava = d.trava; DB.travaFreelancer = d.travaFreelancer || DB.travaFreelancer; }
+async function reloadSolicitacoes() { const d = await api('GET', '/solicitacoes'); DB.solicitacoes = d.solicitacoes; DB.trava = d.trava; DB.travaFreelancer = d.travaFreelancer || DB.travaFreelancer; if (typeof atualizarIndicadoresMenu === 'function') atualizarIndicadoresMenu(); }
 
 /* ---------- upload (corpo binário em streaming; máx., cotas e verificação no servidor) ---------- */
 const EXT_OK = ['.pdf', '.docx', '.xlsx', '.png', '.jpg', '.jpeg'];
