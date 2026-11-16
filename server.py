@@ -1207,7 +1207,7 @@ def gerar_recibo_pdf(conn, sol):
         campo(L, y, 'Solicitante:', d.get('solicitante')); campo(col2, y, 'Departamento:', dep_nome, 90); y -= 15
         campo(L, y, 'E-mail:', sol['email']); campo(col2, y, 'Nº do Pedido:', d.get('numeroOcPi'), 90); y -= 15
         campo(L, y, 'Fornecedor:', d.get('fornecedor')); campo(col2, y, 'Cliente:', d.get('cliente'), 90); y -= 15
-        campo(L, y, 'Empresa:', d.get('empresa')); campo(col2, y, 'Colaborador:', d.get('nomeColaborador'), 90); y -= 15
+        campo(L, y, 'Empresa:', d.get('empresa')); y -= 15
     elif tipo == 'reembolso':
         campo(L, y, 'Nome:', d.get('nome')); y -= 15
         campo(L, y, 'E-mail:', sol['email']); campo(col2, y, 'Departamento:', dep_nome, 90); y -= 15
@@ -1220,7 +1220,7 @@ def gerar_recibo_pdf(conn, sol):
         campo(L, y, 'Modalidade:', MODALIDADES.get(d.get('modalidade'), '—')); campo(col2, y, 'Recorrente:', 'Sim' if d.get('recorrente') == 'sim' else 'Não', 90); y -= 15
         campo(L, y, 'Período:', '%s a %s' % (fmt_data(d.get('dataInicio')), fmt_data(d.get('dataFim')))); y -= 15
     elif tipo == 'rescisao':
-        campo(L, y, 'Tipo:', RESCISAO_TIPOS.get(d.get('tipoRescisao'), '—')); y -= 15
+        campo(L, y, 'Tipo:', RESCISAO_TIPOS.get(d.get('tipoRescisao'), '—')); campo(col2, y, 'Colaborador:', d.get('nomeColaborador'), 90); y -= 15
         campo(L, y, 'Solicitante:', d.get('solicitante')); campo(col2, y, 'Departamento:', dep_nome, 90); y -= 15
         campo(L, y, 'E-mail:', sol['email']); campo(col2, y, 'Empresa:', d.get('empresa'), 90); y -= 15
     else:
@@ -2642,10 +2642,10 @@ def proximo_numero(conn):
 
 
 CAMPOS_OBRIGATORIOS = {
-    'fornecedor': ['titulo', 'solicitante', 'fornecedor', 'cliente', 'numeroOcPi', 'nomeColaborador', 'empresaId', 'descricao', 'valor', 'dataPagamento', 'erroInterno'],
+    'fornecedor': ['titulo', 'solicitante', 'fornecedor', 'cliente', 'numeroOcPi', 'empresaId', 'descricao', 'valor', 'dataPagamento', 'erroInterno'],
     'reembolso': ['nome', 'cliente', 'reembolsadoCliente', 'categoriaDespesa', 'empresaId', 'descricao', 'valor', 'dataPagamento'],
     'grupo': ['titulo', 'solicitante', 'fornecedor', 'empresaId', 'categoria', 'descricao', 'valor', 'dataPagamento', 'erroInterno'],
-    'rescisao': ['solicitante', 'empresaId', 'tipoRescisao', 'descricao', 'valor', 'dataPagamento'],
+    'rescisao': ['solicitante', 'nomeColaborador', 'empresaId', 'tipoRescisao', 'descricao', 'valor', 'dataPagamento'],
     'freelancer': ['solicitante', 'empresaId', 'descricao', 'recorrente', 'modalidade', 'dataInicio', 'dataFim', 'valor', 'nomeFreelancer', 'banco', 'agencia', 'conta', 'cpfCnpj'],
 }
 
@@ -2657,7 +2657,7 @@ def validar_solicitacao(conn, user, body):
     if tipo not in TIPOS_SOLICITACAO:
         raise ApiError(400, 'Tipo de solicitação inválido.')
     d = body.get('dados') or {}
-    if tipo == 'fornecedor':
+    if tipo == 'rescisao':
         d['nomeColaborador'] = re.sub(r'\s+', ' ', str(d.get('nomeColaborador') or '')).strip()[:120]  # obrigatório: colaborador a quem o pedido se refere
     if tipo == 'fornecedor' and isinstance(d.get('referencias'), list):  # Nº do Pedido: vários (OC, PI, PC, PO, OP, OS…); numeroOcPi guarda a lista em texto
         refs = []
