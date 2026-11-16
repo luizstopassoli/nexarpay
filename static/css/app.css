@@ -834,7 +834,7 @@ body:not(.perfil-admin) .scenario-radio{ pointer-events:none; cursor:default; op
 .st-fiscal{ color:#F97316; background:color-mix(in srgb, #F97316 16%, transparent); }
 
 /* Ponto de ação pendente (estilo notificação), no menu lateral */
-.nav-dot{ width:9px; height:9px; border-radius:50%; background:var(--alert); flex:none; margin-left:auto; box-shadow:0 0 0 3px color-mix(in srgb, var(--alert) 24%, transparent); animation:navDotPulse 2.6s ease-out infinite; }
+.nav-dot{ width:6px; height:6px; border-radius:50%; background:var(--alert); flex:none; margin-left:auto; box-shadow:0 0 0 3px color-mix(in srgb, var(--alert) 24%, transparent); animation:navDotPulse 2.6s ease-out infinite; }
 .nav-group-toggle .nav-dot{ margin-left:0; margin-right:10px; }
 @keyframes navDotPulse{ 0%{ box-shadow:0 0 0 0 color-mix(in srgb, var(--alert) 55%, transparent); } 70%{ box-shadow:0 0 0 7px color-mix(in srgb, var(--alert) 0%, transparent); } 100%{ box-shadow:0 0 0 0 color-mix(in srgb, var(--alert) 0%, transparent); } }
 @media (prefers-reduced-motion: reduce){ .nav-dot{ animation:none; } }

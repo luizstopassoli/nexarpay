@@ -1207,7 +1207,7 @@ def gerar_recibo_pdf(conn, sol):
         campo(L, y, 'Solicitante:', d.get('solicitante')); campo(col2, y, 'Departamento:', dep_nome, 90); y -= 15
         campo(L, y, 'E-mail:', sol['email']); campo(col2, y, 'Nº do Pedido:', d.get('numeroOcPi'), 90); y -= 15
         campo(L, y, 'Fornecedor:', d.get('fornecedor')); campo(col2, y, 'Cliente:', d.get('cliente'), 90); y -= 15
-        campo(L, y, 'Empresa:', d.get('empresa')); y -= 15
+        campo(L, y, 'Empresa:', d.get('empresa')); campo(col2, y, 'Colaborador:', d.get('nomeColaborador'), 90); y -= 15
     elif tipo == 'reembolso':
         campo(L, y, 'Nome:', d.get('nome')); y -= 15
         campo(L, y, 'E-mail:', sol['email']); campo(col2, y, 'Departamento:', dep_nome, 90); y -= 15
@@ -2642,7 +2642,7 @@ def proximo_numero(conn):
 
 
 CAMPOS_OBRIGATORIOS = {
-    'fornecedor': ['titulo', 'solicitante', 'fornecedor', 'cliente', 'numeroOcPi', 'empresaId', 'descricao', 'valor', 'dataPagamento', 'erroInterno'],
+    'fornecedor': ['titulo', 'solicitante', 'fornecedor', 'cliente', 'numeroOcPi', 'nomeColaborador', 'empresaId', 'descricao', 'valor', 'dataPagamento', 'erroInterno'],
     'reembolso': ['nome', 'cliente', 'reembolsadoCliente', 'categoriaDespesa', 'empresaId', 'descricao', 'valor', 'dataPagamento'],
     'grupo': ['titulo', 'solicitante', 'fornecedor', 'empresaId', 'categoria', 'descricao', 'valor', 'dataPagamento', 'erroInterno'],
     'rescisao': ['solicitante', 'empresaId', 'tipoRescisao', 'descricao', 'valor', 'dataPagamento'],
@@ -2657,6 +2657,8 @@ def validar_solicitacao(conn, user, body):
     if tipo not in TIPOS_SOLICITACAO:
         raise ApiError(400, 'Tipo de solicitação inválido.')
     d = body.get('dados') or {}
+    if tipo == 'fornecedor':
+        d['nomeColaborador'] = re.sub(r'\s+', ' ', str(d.get('nomeColaborador') or '')).strip()[:120]  # obrigatório: colaborador a quem o pedido se refere
     if tipo == 'fornecedor' and isinstance(d.get('referencias'), list):  # Nº do Pedido: vários (OC, PI, PC, PO, OP, OS…); numeroOcPi guarda a lista em texto
         refs = []
         for x in d['referencias']:
