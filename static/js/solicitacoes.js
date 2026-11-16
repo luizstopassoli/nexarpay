@@ -188,14 +188,68 @@ function kbColunas(tipo, itens) {
     : [a1, a2, fin];
   return fluxo.concat([Object.assign(encerradas, { t: 'Encerrado' })]);
 }
+// etapas do fluxo de cada módulo (a 1ª etapa é sempre a Solicitação); alimenta a barra de progresso do cartão
+const KB_FLUXO = {
+  fornecedor: ['aprovacao1', 'aprovacao2', 'financeiro'], grupo: ['aprovacao1', 'aprovacao2', 'financeiro'],
+  reembolso: ['fiscal', 'aprovacao1', 'aprovacao2', 'financeiro'], freelancer: ['aprovacao1', 'aprovacao2', 'rh', 'financeiro'],
+  rescisao: ['rh', 'aprovacao1', 'aprovacao2', 'financeiro'],
+};
+const KB_ICO_TIPO = { fornecedor: 'truck', reembolso: 'repeat', freelancer: 'users', rescisao: 'userX', grupo: 'building' };
+const KB_MODALIDADE = { presencial: 'Presencial', home_office: 'Home office', hibrido: 'Híbrido' };
+const KB_RESC_TIPO = { pedido_dispensa: 'Pedido de Dispensa', dispensado: 'Dispensado' };
+function kbCorta(t, n) { t = String(t || '').trim().replace(/\s+/g, ' '); return t.length > n ? t.slice(0, n - 1).trimEnd() + '…' : t; }
+function kbDm(iso) { return iso ? fmtDate(iso).slice(0, 5) : ''; }
+// prazo de pagamento: "vence em 3 dias", "atrasada", "pago"…
+function kbPrazo(x) {
+  if (x.status === 'encerrada') return { cls: 'ok', t: 'pago' };
+  if (!ABERTAS.includes(x.status) || !x.dataPagamento) return null;
+  const n = Math.round((new Date(x.dataPagamento + 'T00:00:00') - new Date(new Date().toDateString())) / 86400000);
+  if (n < 0) return { cls: 'late', t: 'atrasada' };
+  if (n === 0) return { cls: 'soon', t: 'vence hoje' };
+  if (n === 1) return { cls: 'soon', t: 'vence amanhã' };
+  return n <= 3 ? { cls: 'soon', t: `vence em ${n} dias` } : { cls: '', t: `em ${n} dias` };
+}
+// linhas que mudam por módulo: título, subtítulo, linha de contexto (caixa) e a etiqueta à direita
+function kbConteudo(x) {
+  const d = x.dados || {};
+  if (x.tipo === 'rescisao') return { titulo: d.nomeColaborador || x.titulo, sub: `${KB_RESC_TIPO[d.tipoRescisao] || 'Rescisão'}${d.descricao ? ' · Motivo: ' + kbCorta(d.descricao, 60) : ''}`,
+    ctx: ['building', 'Departamento: ' + depNome(x.departamentoId)], quem: '', dir: d.empresa || '' };
+  if (x.tipo === 'freelancer') {
+    const rh = d.rh, rhTxt = !rh ? 'RH: contratação pendente' : rh.contratado === 'sim' ? `RH: contratação ${kbDm(rh.dataContratacao)} · onboarding ${kbDm(rh.dataOnboarding)}` : 'RH: não contratado';
+    return { titulo: x.titulo, sub: [KB_MODALIDADE[d.modalidade], d.dataInicio ? `${kbDm(d.dataInicio)} a ${fmtDate(d.dataFim)}` : ''].filter(Boolean).join(' · '),
+      ctx: ['clock', rhTxt], quem: x.solicitanteNome, dir: '' };
+  }
+  if (x.tipo === 'reembolso') return { titulo: x.titulo, sub: d.nome ? 'Para: ' + d.nome : '', ctx: d.cliente ? ['building', 'Cliente: ' + d.cliente] : null, quem: x.solicitanteNome, dir: '' };
+  if (x.tipo === 'grupo') return { titulo: x.titulo, sub: d.fornecedor ? 'Fornecedor: ' + d.fornecedor : '', ctx: d.categoria ? ['tag', 'Categoria: ' + d.categoria] : null, quem: x.solicitanteNome, dir: '' };
+  return { titulo: x.titulo, sub: d.fornecedor ? 'Fornecedor: ' + d.fornecedor : '', ctx: d.cliente ? ['building', 'Cliente: ' + d.cliente] : null, quem: x.solicitanteNome, dir: '' };  // Produtos e Serviços
+}
+function kbEtapa(x) {
+  const fluxo = KB_FLUXO[x.tipo] || KB_FLUXO.fornecedor, total = fluxo.length + 1;
+  if (x.status === 'encerrada') return { pos: total, total, txt: 'Encerrada' };
+  if (x.status === 'reprovada') return { pos: 0, total, txt: 'Reprovada' };
+  if (x.status === 'alteracao') return { pos: 1, total, txt: 'Alteração solicitada', etapa: true };
+  const i = x.status === 'rh2' ? fluxo.length : fluxo.indexOf(x.status);
+  return { pos: i < 0 ? 1 : i + 2, total, txt: KB_ROTULO[x.status] || x.status, etapa: true };
+}
 function kbCartao(x, modulo) {
-  const mine = aguardaMinhaAcao(x);
+  const mine = aguardaMinhaAcao(x), c = kbConteudo(x), e = kbEtapa(x), pz = kbPrazo(x), d = x.dados || {};
+  const prog = Array.from({ length: e.total }, (_, i) => `<i class="${i < e.pos ? 'on' : ''}"></i>`).join('');
+  const flags = [];
+  if (x.atrasada) flags.push('<span class="st st-atrasada">Atrasada</span>');
+  if (d.erroInterno === 'sim') flags.push('<span class="st st-atrasada">Erro interno</span>');
+  if (x.tipo === 'reembolso' && d.reembolsadoCliente === 'sim') flags.push('<span class="st st-encerrada">Reembolsado pelo cliente</span>');
+  if (x.tipo === 'reembolso' && x.docFiscal) flags.push('<span class="st st-encerrada">Recibo anexado</span>');
+  if (x.docFiscalPendente) flags.push(`<span class="st ${x.docFiscalVencido ? 'st-atrasada' : 'st-fiscal'}" title="${x.docFiscalVencido ? 'Documento fiscal em atraso' : 'Documento fiscal pendente'}">Doc. fiscal</span>`);
   return `<div class="kb-card ${mine ? 'mine' : ''}" role="button" tabindex="0" data-kb-open="${x.id}" title="Abrir ${escapeHtml(x.numero)}">
-    <div class="kb-top"><span>${escapeHtml(x.numero)}</span><span class="badge">${escapeHtml(x.tipoLabel)}</span></div>
-    <div class="kb-title">${escapeHtml(x.titulo)}</div>
-    <div class="kb-meta"><span class="dept-chip">${escapeHtml(depNome(x.departamentoId))}</span><span>${escapeHtml(x.solicitanteNome || '')}</span></div>
-    <div class="kb-foot"><span class="kb-val">${fmtBRL(x.valor)}</span><span class="kb-date">pgto ${fmtDate(x.dataPagamento)}</span></div>
-    <div class="kb-flags">${modulo ? '' : `<span class="st st-${x.status}">${escapeHtml(KB_ROTULO[x.status] || x.status)}</span>`}${x.atrasada ? '<span class="st st-atrasada">Atrasada</span>' : ''}${x.docFiscalVencido ? '<span class="st st-atrasada" title="Documento fiscal em atraso">Doc. fiscal</span>' : ''}${mine ? '<span class="kb-mine-tag">sua ação</span>' : ''}</div>
+    <div class="kb-top"><span class="kb-mod">${ICONS[KB_ICO_TIPO[x.tipo]] || ''}${escapeHtml(x.tipoLabel)}</span><span class="kb-num">${escapeHtml(x.numero)}</span></div>
+    <div class="kb-title">${escapeHtml(c.titulo)}</div>
+    ${c.sub ? `<div class="kb-subt">${escapeHtml(c.sub)}</div>` : ''}
+    ${c.ctx ? `<div class="kb-ctx">${ICONS[c.ctx[0]] || ''}<span>${escapeHtml(c.ctx[1])}</span></div>` : ''}
+    <div class="kb-meta"><span class="dept-chip">${escapeHtml(depNome(x.departamentoId))}</span>${c.quem ? `<span>${escapeHtml(c.quem)}</span>` : ''}${c.dir ? `<span class="kb-tag">${escapeHtml(c.dir)}</span>` : ''}</div>
+    <div class="kb-foot"><span class="kb-val">${fmtBRL(x.valor)}</span><span class="kb-date">${pz ? `<b class="${pz.cls}">${pz.t}</b>` : ''}pgto ${fmtDate(x.dataPagamento)}</span></div>
+    <div class="kb-prog">${prog}</div>
+    <div class="kb-stg"><span>${escapeHtml(e.txt)}${e.etapa ? ` <em>· etapa ${e.pos} de ${e.total}</em>` : ''}</span>${mine ? '<span class="kb-mine-tag">Sua ação</span>' : ''}</div>
+    ${flags.length ? `<div class="kb-flags">${flags.join('')}</div>` : ''}
   </div>`;
 }
 function kbAreaHtml(all, st, modulo) {

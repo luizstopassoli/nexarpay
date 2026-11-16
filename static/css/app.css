@@ -465,7 +465,7 @@ table.data-table tbody tr:last-child td{ border-bottom:none; }
 .toast{
   background: var(--elevated); border:1px solid var(--border-strong); border-radius:12px; padding:13px 16px;
   display:flex; align-items:center; gap:10px; font-size:13px; font-weight:600; box-shadow:var(--shadow-pop);
-  min-width:260px; animation: toastIn .25s cubic-bezier(.2,.8,.2,1);
+  min-width:280px; animation: toastIn .25s cubic-bezier(.2,.8,.2,1);
 }
 .toast svg{ width:16px; height:16px; flex:none; }
 .toast.success svg{ color:var(--good); }
@@ -805,25 +805,40 @@ body:not(.perfil-admin) .scenario-radio{ pointer-events:none; cursor:default; op
 .vw-bar .search-box{ flex:1; min-width:220px; }
 .vw-bar .period-filter button{ display:inline-flex; align-items:center; gap:6px; }
 .vw-bar .period-filter svg{ width:14px; height:14px; }
-.kb-board{ display:grid; grid-template-columns:repeat(var(--kb-cols, 5), minmax(220px, 1fr)); gap:14px; align-items:start; overflow-x:auto; padding-bottom:8px; }
-.kb-col{ background:var(--card-alt); border:1px solid var(--border); border-radius:var(--radius); padding:12px 10px 10px; min-width:220px; }
+.kb-board{ display:grid; grid-template-columns:repeat(var(--kb-cols, 5), minmax(280px, 1fr)); gap:14px; align-items:start; overflow-x:auto; padding-bottom:8px; }
+.kb-col{ background:var(--card-alt); border:1px solid var(--border); border-radius:var(--radius); padding:12px 10px 10px; min-width:280px; }
 .kb-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin:0 4px 2px; }
 .kb-head h3{ font-size:13px; font-weight:800; display:flex; align-items:center; gap:8px; }
 .kb-dot{ width:8px; height:8px; border-radius:50%; flex:none; }
 .kb-count{ font-size:11.5px; font-weight:700; background:var(--card); border:1px solid var(--border); border-radius:999px; padding:1px 9px; color:var(--text-dim); }
 .kb-sum{ font-size:11.5px; color:var(--text-faint); font-weight:600; margin:0 4px 10px; }
-.kb-card{ background:var(--card); border:1px solid var(--border); border-radius:10px; padding:11px 12px; margin-bottom:10px; cursor:pointer; transition:border-color .15s ease, transform .15s ease; }
+.kb-card{ background:var(--card); border:1px solid var(--border); border-radius:12px; padding:13px 14px; margin-bottom:12px; cursor:pointer; transition:border-color .15s ease, transform .15s ease; }
 .kb-card:hover, .kb-card:focus-visible{ border-color:var(--c1); transform:translateY(-1px); outline:none; }
 .kb-card.mine{ border-color:var(--c1); box-shadow:0 0 0 1px color-mix(in srgb, var(--c1) 35%, transparent); }
-.kb-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:11.5px; color:var(--text-faint); font-weight:600; margin-bottom:6px; }
-.kb-title{ font-size:13px; font-weight:700; color:var(--text); line-height:1.35; margin-bottom:8px; word-break:break-word; }
-.kb-meta{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:11.5px; color:var(--text-dim); margin-bottom:9px; }
-.kb-foot{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
-.kb-val{ font-size:14px; font-weight:800; font-variant-numeric:tabular-nums; }
-.kb-date{ font-size:11.5px; color:var(--text-faint); }
+.kb-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:10.5px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; margin-bottom:7px; }
+.kb-mod{ display:inline-flex; align-items:center; gap:6px; color:var(--c1); }
+.kb-mod svg{ width:13px; height:13px; }
+.kb-num{ color:var(--text-faint); font-weight:700; letter-spacing:.02em; }
+.kb-title{ font-size:14.5px; font-weight:800; color:var(--text); line-height:1.3; word-break:break-word; }
+.kb-subt{ font-size:12px; color:var(--text-dim); margin:2px 0 0; word-break:break-word; }
+.kb-title + .kb-meta, .kb-subt + .kb-meta{ margin-top:9px; }
+.kb-ctx{ display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-dim); background:var(--card-alt); border:1px solid var(--border); border-radius:8px; padding:7px 10px; margin:9px 0; }
+.kb-ctx svg{ width:14px; height:14px; flex:none; color:var(--text-faint); }
+.kb-ctx span{ min-width:0; word-break:break-word; }
+.kb-meta{ display:flex; align-items:center; gap:7px; flex-wrap:wrap; font-size:12px; color:var(--text-dim); margin-bottom:11px; }
+.kb-tag{ margin-left:auto; font-size:11px; font-weight:700; padding:2px 8px; border-radius:6px; border:1px solid var(--border); background:var(--card-alt); color:var(--text-dim); }
+.kb-foot{ display:flex; align-items:flex-end; justify-content:space-between; gap:8px; margin-bottom:9px; }
+.kb-val{ font-size:19px; font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:-.01em; }
+.kb-date{ white-space:nowrap; text-align:right; font-size:11px; color:var(--text-faint); line-height:1.35; }
+.kb-date b{ display:block; font-size:11.5px; font-weight:800; }
+.kb-date b.ok{ color:var(--good); } .kb-date b.soon{ color:var(--warning); } .kb-date b.late{ color:var(--alert); }
+.kb-prog{ display:grid; grid-auto-flow:column; grid-auto-columns:1fr; gap:4px; margin-bottom:7px; }
+.kb-prog i{ height:4px; border-radius:3px; background:var(--border); }
+.kb-prog i.on{ background:var(--c1); }
+.kb-stg{ display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:11.5px; font-weight:700; color:var(--text-dim); }
+.kb-stg em{ font-style:normal; color:var(--text-faint); font-weight:600; }
 .kb-flags{ display:flex; gap:6px; flex-wrap:wrap; margin-top:9px; }
-.kb-flags:empty{ display:none; }
-.kb-mine-tag{ font-size:10.5px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color:var(--c1); align-self:center; }
+.kb-mine-tag{ font-size:10px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; color:var(--c1); background:color-mix(in srgb, var(--c1) 14%, transparent); border:1px solid color-mix(in srgb, var(--c1) 40%, transparent); border-radius:6px; padding:3px 8px; white-space:nowrap; }
 .kb-empty{ text-align:center; font-size:12px; color:var(--text-faint); padding:18px 6px; border:1px dashed var(--border); border-radius:10px; }
 .kb-more{ text-align:center; font-size:12px; font-weight:700; color:var(--c1); padding:4px 0 2px; cursor:pointer; }
 .kb-lane{ display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
