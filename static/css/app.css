@@ -280,7 +280,7 @@ button{ font-family:inherit; }
 .period-custom{ display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-faint); }
 .period-custom .input{ padding:5px 8px; font-size:12px; width:auto; }
 
-.page{ padding:24px 28px 64px; max-width:1520px; }
+.page{ padding:24px 28px 64px; }
 .page-hidden{ display:none; }
 
 .btn{
@@ -855,3 +855,82 @@ body:not(.perfil-admin) .scenario-radio{ pointer-events:none; cursor:default; op
 @media (prefers-reduced-motion: reduce){ .nav-dot{ animation:none; } }
 /* Acesso Rápido: contagem em aberto em vermelho quando há pedidos */
 .qa-count.alerta{ color:var(--alert); font-weight:700; }
+
+/* ===================== RESPONSIVO (layout fluido) =====================
+   >= 1521px  conteúdo ocupa toda a largura (sem limite de 1520px) e os cartões se distribuem sozinhos
+   1100-1520  igual ao desenho de referência (1512 e 1280 não mudam)
+   768-1099   tablet: menu compacto só com ícones
+   <= 767     celular: menu em gaveta (botão ☰), tudo em 1 coluna, listas em cartões, janelas em tela cheia */
+.sidebar{ height:100vh; height:100dvh; overflow-y:auto; }
+.topbar, .topbar-right{ flex-wrap:wrap; }
+.menu-btn, .nav-overlay{ display:none; }
+@media (min-width:1521px){
+  .grid-4{ grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); }
+}
+@media (min-width:768px) and (max-width:1099px){
+  .app-shell{ grid-template-columns:76px minmax(0, 1fr); }
+  .sidebar{ padding:18px 10px; align-items:center; }
+  .brand{ padding:6px 0 18px; width:42px; overflow:hidden; flex:none; justify-content:flex-start; gap:0; }
+  .brand .brand-logo-img{ width:176px; max-width:none; height:auto; }
+  .sidebar .nav-group-label, .sidebar .mini-hint, .sidebar .user-meta, .sidebar .nav-caret{ display:none; }
+  #navList{ width:100%; display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .nav-item{ justify-content:center; padding:11px; width:48px; position:relative; }
+  .nav-item > span:not(.nav-ico):not(.nav-dot){ display:none; }
+  .nav-item .nav-dot{ position:absolute; top:7px; right:7px; margin:0 !important; }
+  .nav-submenu{ max-height:none; overflow:visible; margin:0; padding:0 !important; border-left:none; align-items:center; }
+  .nav-sub-item{ padding:9px 11px; }
+  .sidebar-foot{ align-items:center; width:100%; }
+  .user-card{ padding:6px; justify-content:center; cursor:pointer; }
+  .theme-toggle{ flex-direction:column; border-radius:14px; padding:3px; gap:2px; }
+  .theme-toggle button{ font-size:0; gap:0; padding:9px; }
+  #logoutBtn{ font-size:0; gap:0; width:48px; justify-content:center; padding:10px; }
+  .theme-toggle button svg, #logoutBtn svg{ width:16px; height:16px; }
+  .theme-toggle button span, #logoutBtn span{ display:flex; }
+}
+@media (max-width:767px){
+  .app-shell{ grid-template-columns:minmax(0, 1fr); }
+  .sidebar{ position:fixed; top:4px; bottom:0; left:0; width:min(300px, 86vw); height:auto; transform:translateX(-104%); visibility:hidden;
+    transition:transform .2s ease, visibility 0s linear .2s; z-index:300; box-shadow:var(--shadow-pop); }
+  .app-shell.nav-open .sidebar{ transform:none; visibility:visible; transition-delay:0s; }
+  .nav-overlay{ display:block; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:290; opacity:0; pointer-events:none; transition:opacity .2s ease; }
+  .app-shell.nav-open .nav-overlay{ opacity:1; pointer-events:auto; }
+  .menu-btn{ display:inline-flex; align-items:center; justify-content:center; width:44px; height:44px; flex:none; border-radius:10px;
+    border:1px solid var(--border); background:var(--card); color:var(--text); cursor:pointer; }
+  .menu-btn svg{ width:20px; height:20px; }
+  .topbar{ padding:12px 14px; gap:10px; }
+  .topbar > div:not(.topbar-right){ flex:1; min-width:0; }
+  .topbar h1{ font-size:17px; }
+  .topbar .subtitle{ display:none; }
+  .topbar-right{ width:100%; }
+  .topbar-right:empty{ display:none; }
+  .topbar-right .period-filter{ width:100%; }
+  .topbar-right .period-filter button{ flex:1; }
+  .page{ padding:14px 14px 56px; }
+  .section-title-row{ flex-wrap:wrap; }
+  .section-title-row .hint{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; max-width:100%; }
+  .btn:not(.btn-sm), select.input, input.input{ min-height:44px; }
+  .modal-backdrop{ padding:0; align-items:stretch; }
+  .modal, .modal.modal-lg{ max-width:none; border-radius:0; margin:0; height:100dvh; max-height:100dvh; display:flex; flex-direction:column; }
+  .modal-body{ max-height:none; flex:1; min-height:0; padding:18px 16px; }
+  .modal-body{ overflow-x:hidden; }
+  .form-grid{ grid-template-columns:minmax(0, 1fr); }
+  .form-grid > *, .form-field{ min-width:0; }
+  .form-field .input, .form-field select, .form-field textarea{ max-width:100%; }
+  .modal-head{ padding:16px; flex:none; }
+  .modal-foot{ padding:12px 16px; flex:none; flex-wrap:wrap; }
+  .modal-foot .btn{ flex:1; }
+  /* Kanban: uma coluna quase da largura da tela, com encaixe ao rolar */
+  .kb-board{ grid-template-columns:repeat(var(--kb-cols, 5), min(86vw, 300px)); scroll-snap-type:x proximity; }
+  .kb-col{ scroll-snap-align:start; }
+  /* listas de solicitações: cada linha vira um cartão compacto em 2 colunas */
+  table.data-table.stack{ min-width:0; }
+  .stack, .stack tbody, .stack tr, .stack td{ display:block; }
+  .stack thead{ display:none; }
+  table.data-table.stack tbody tr{ display:grid; grid-template-columns:1fr 1fr; gap:10px 12px; padding:14px; border-bottom:1px solid var(--border); }
+  table.data-table.stack tbody td{ display:block; padding:0; border:none; white-space:normal !important; min-width:0 !important; text-align:left; }
+  table.data-table.stack tbody td::before{ content:attr(data-label); display:block; margin-bottom:2px; color:var(--text-faint); font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; }
+  table.data-table.stack tbody td:not([data-label]){ display:none; }
+  table.data-table.stack tbody td[data-label="Título"], table.data-table.stack tbody td[data-label="Status"]{ grid-column:1 / -1; }
+  table.data-table.stack tbody td.cell-strong{ font-size:14px; }
+}
+@media (prefers-reduced-motion: reduce){ .sidebar, .nav-overlay{ transition:none; } }

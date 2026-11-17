@@ -30,7 +30,21 @@ const grupoAberto = {};
 function defaultPageFor(p) { return ({ admin: 'dashboard', diretor: 'gerencial', financeiro: 'dashboard', gestor: 'dashboard', rh: 'dashboard', colaborador: 'solicitacoes', tv: 'dashboard_tv' })[p] || 'solicitacoes'; }
 function pagesForCurrentUser() { const p = perfil(); return PAGES.filter(pg => pg.roles.includes(p)); }
 
+function setNavAberto(on) {  // celular: o menu lateral é uma gaveta aberta pelo botão ☰
+  const sh = document.getElementById('appShell'), b = document.getElementById('menuBtn');
+  if (!sh) return;
+  sh.classList.toggle('nav-open', !!on);
+  if (b) { b.setAttribute('aria-expanded', on ? 'true' : 'false'); b.setAttribute('aria-label', on ? 'Fechar menu' : 'Abrir menu'); }
+}
+function wireNavMobile() {
+  const b = document.getElementById('menuBtn'), ov = document.getElementById('navOverlay');
+  if (b) { b.innerHTML = ICONS.menu; b.addEventListener('click', () => setNavAberto(!document.getElementById('appShell').classList.contains('nav-open'))); }
+  if (ov) ov.addEventListener('click', () => setNavAberto(false));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') setNavAberto(false); });
+  window.matchMedia('(min-width: 768px)').addEventListener('change', e => { if (e.matches) setNavAberto(false); });
+}
 function navigateTo(pageId) {
+  setNavAberto(false);
   const allowed = pagesForCurrentUser();
   if (!allowed.find(p => p.id === pageId)) pageId = (allowed[0] && allowed[0].id) || 'solicitacoes';
   currentPage = pageId;
@@ -71,21 +85,21 @@ function pageSubtitleFor(id) {
 }
 window.__rerenderCurrentPage = () => { const def = PAGES.find(p => p.id === currentPage); if (def) def.render(); };
 
-function navItemHtml(p) { return `<div class="nav-item ${p.id === currentPage ? 'active' : ''}" data-page="${p.id}">${icon(p.ico)}<span>${p.label}</span></div>`; }
+function navItemHtml(p) { return `<div class="nav-item ${p.id === currentPage ? 'active' : ''}" data-page="${p.id}" title="${escapeHtml(p.label)}">${icon(p.ico)}<span>${p.label}</span></div>`; }
 function buildSidebar() {
   const nav = document.getElementById('navList');
   const pages = pagesForCurrentUser().filter(p => !p.oculto);  // "oculto": só aparece pelo cartão do usuário
   const ids = new Set(pages.map(p => p.id));
   const pend = (typeof pendenciasPorModulo === 'function' && DB.user) ? pendenciasPorModulo() : {};
   const ponto = (n) => n > 0 ? `<span class="nav-dot" role="img" aria-label="${n} pendência(s) de ação" title="${n} pendência(s) aguardando você"></span>` : '';
-  const subItem = (p) => `<div class="nav-item nav-sub-item ${p.id === currentPage ? 'active' : ''}" data-page="${p.id}">${icon(p.ico)}<span>${p.label}</span>${ponto(pend[p.id] || 0)}</div>`;
+  const subItem = (p) => `<div class="nav-item nav-sub-item ${p.id === currentPage ? 'active' : ''}" data-page="${p.id}" title="${escapeHtml(p.label)}">${icon(p.ico)}<span>${p.label}</span>${ponto(pend[p.id] || 0)}</div>`;
   let html = '';
   pages.forEach(p => {
     const g = GRUPOS_MENU.find(x => x.main === p.id);
     const subs = g ? pages.filter(x => g.subs.includes(x.id)) : [];
     if (g && subs.length) {
       const aberto = !!grupoAberto[g.key], emSubAtiva = subs.some(x => x.id === currentPage);
-      html += `<div class="nav-item nav-group-toggle ${p.id === currentPage ? 'active' : emSubAtiva ? 'active-parent' : ''}" data-page="${p.id}">
+      html += `<div class="nav-item nav-group-toggle ${p.id === currentPage ? 'active' : emSubAtiva ? 'active-parent' : ''}" data-page="${p.id}" title="${escapeHtml(p.label)}">
           ${icon(p.ico)}<span class="nav-group-label-text">${p.label}</span>${g.key === 'solicitacoes' ? ponto(subs.reduce((t, x) => t + (pend[x.id] || 0), 0)) : ''}<span class="nav-caret ${aberto ? 'open' : ''}" data-group-toggle="${g.key}" role="button" aria-label="Mostrar mais opções de ${p.label}" title="Mostrar mais opções">${ICONS.chevDown}</span>
         </div>
         <div class="nav-submenu ${aberto ? 'open' : ''}" data-group-panel="${g.key}">${subs.map(subItem).join('')}</div>`;
@@ -118,6 +132,7 @@ function renderUserCard() {
     <span class="role-badge ${u.perfil}">${escapeHtml(perfilLabel(u.perfil))}</span>
     <div class="user-pref ${currentPage === 'preferencias' ? 'active' : ''}" id="userPrefLink" role="button" tabindex="0">${ICONS.user}<span>Preferências</span></div>
 </div>`;
+  const av = card.querySelector('.user-avatar'); if (av) { av.title = 'Preferências'; av.addEventListener('click', () => navigateTo('preferencias')); }  // com o menu compacto o avatar é o atalho
   const go = document.getElementById('userPrefLink');
   go.addEventListener('click', () => navigateTo('preferencias'));
   go.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigateTo('preferencias'); } });
@@ -130,6 +145,7 @@ async function boot() {
     document.getElementById('icoMoon').innerHTML = ICONS.moon;
     document.getElementById('icoSun').innerHTML = ICONS.sun;
     document.getElementById('icoLogout').innerHTML = ICONS.logout;
+    wireNavMobile();
     document.getElementById('themeBtnDark').addEventListener('click', () => setTheme('dark'));
     document.getElementById('themeBtnLight').addEventListener('click', () => setTheme('light'));
     wireAuthUI();

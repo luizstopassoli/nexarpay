@@ -308,18 +308,18 @@ function bloco(titulo, ico, lista, vazio, sub) {
   </div>`;
 }
 function tabelaSolicitacoes(lista, resumo = false) {
-  return `<table class="data-table">
+  return `<table class="data-table stack">
     <thead><tr><th>Nº</th><th>Título</th><th>Tipo</th><th>Solicitante</th><th>Departamento</th><th>Data da Solicitação</th><th>Valor Total</th><th>Data do Pagamento</th><th>Status</th><th></th></tr></thead>
     <tbody>${lista.map(s => `<tr data-open-sol="${s.id}" style="cursor:pointer;">
-      <td class="cell-dim" style="white-space:nowrap;">${escapeHtml(s.numero)}</td>
-      <td class="cell-strong" style="white-space:normal;min-width:200px;">${escapeHtml(s.titulo)}</td>
-      <td><span class="badge">${escapeHtml(s.tipoLabel)}</span></td>
-      <td>${escapeHtml(s.solicitanteNome)}</td>
-      <td><span class="dept-chip">${escapeHtml(depNome(s.departamentoId))}</span></td>
-      <td class="cell-dim">${fmtDateTime(s.criadoEm)}</td>
-      <td class="cell-num">${fmtBRL(s.valor)}</td>
-      <td class="cell-dim">${fmtDate(s.dataPagamento)}</td>
-      <td>${statusPill(s)}${s.docFiscalVencido ? ' <span class="st st-atrasada" title="Documento fiscal em atraso">Doc. fiscal</span>' : ''}</td>
+      <td data-label="Nº" class="cell-dim" style="white-space:nowrap;">${escapeHtml(s.numero)}</td>
+      <td data-label="Título" class="cell-strong" style="white-space:normal;min-width:200px;">${escapeHtml(s.titulo)}</td>
+      <td data-label="Tipo"><span class="badge">${escapeHtml(s.tipoLabel)}</span></td>
+      <td data-label="Solicitante">${escapeHtml(s.solicitanteNome)}</td>
+      <td data-label="Departamento"><span class="dept-chip">${escapeHtml(depNome(s.departamentoId))}</span></td>
+      <td data-label="Solicitação" class="cell-dim">${fmtDateTime(s.criadoEm)}</td>
+      <td data-label="Valor" class="cell-num">${fmtBRL(s.valor)}</td>
+      <td data-label="Pagamento" class="cell-dim">${fmtDate(s.dataPagamento)}</td>
+      <td data-label="Status">${statusPill(s)}${s.docFiscalVencido ? ' <span class="st st-atrasada" title="Documento fiscal em atraso">Doc. fiscal</span>' : ''}</td>
       <td><div class="row-actions" style="justify-content:flex-end;"><button class="icon-btn" title="Abrir">${ICONS.eye}</button></div></td>
     </tr>`).join('')}</tbody></table>`;
 }
