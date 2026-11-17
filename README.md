@@ -135,8 +135,8 @@ Veja `docker-compose.yml` e a pasta `deploy/`:
 Variáveis: `NEXARPAY_DEMO`, `NEXARPAY_DEMO_SENHA`, `NEXARPAY_HTTPS`, `NEXARPAY_TRUST_PROXY`, `NEXARPAY_URL_BASE`, `NEXARPAY_DOMINIO`, `NEXARPAY_HOST`.
 **Use somente dados fictícios na demo.** Multi-cliente (multi-tenant), criptografia de campos e conformidade LGPD ainda não foram implementados.
 
-## RH 1 / RH 2, Freelancer recorrente e Rescisões
+## RH 1 / RH 2, Freelancer recorrente e Rescisão/Férias
 - **Usuário RH**: no cadastro marque **RH 1** (aprova Freelancer e Rescisão, pode alterar "Recorrente") e/ou **RH 2** (acompanha o Freelancer recorrente). RH sem marcação não aprova nada.
 - **Freelancer** não recorrente: Solicitante > Aprov. 1 > Aprov. 2 > RH 1 > Financeiro. **Recorrente**: ... > RH 1 > RH 2, sem Financeiro. O RH 2 ajusta valor/término (motivo + anexo obrigatórios) e encerra; o valor vira gasto realizado.
 - Faltando 7 dias (ou menos) para o término, o sistema avisa na tela e envia e-mail diário a RH 1 e RH 2 (rotina das 9h, `--alertas-nf`).
-- **Rescisões**: solicitam RH 1, RH 2 e Financeiro. Fluxo: RH 1 > Aprov. 1 > Aprov. 2 > Financeiro. Visível só para Diretoria, Financeiro, RH 1/RH 2 e o solicitante; sem cobrança de documento fiscal.
+- **Rescisão/Férias**: solicitam RH 1, RH 2 e Financeiro. O tipo "Férias" não tem Motivo do Desligamento (o campo fica oculto). Fluxo: RH 1 > Aprov. 1 > Aprov. 2 > Financeiro. Visível só para Diretoria, Financeiro, RH 1/RH 2 e o solicitante; sem cobrança de documento fiscal.

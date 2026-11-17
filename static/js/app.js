@@ -65,7 +65,7 @@ function pageSubtitleFor(id) {
     sol_fornecedor: 'Pagamentos a fornecedores e reembolsos a clientes — aprovações e acompanhamento',
     sol_reembolso: 'Despesas pagas pelo colaborador, com Aprovação Fiscal — aprovações e acompanhamento',
     sol_freelancer: 'Contratação de profissionais autônomos — aprovações e acompanhamento',
-    sol_rescisao: 'Custos de desligamento de colaboradores — aprovações e acompanhamento',
+    sol_rescisao: 'Custos de férias e desligamento de colaboradores — aprovações e acompanhamento',
     sol_grupo: 'Despesas internas da empresa ou do Grupo — aprovações e acompanhamento',
   }[id] || '';
 }

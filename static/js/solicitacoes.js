@@ -1,11 +1,11 @@
 /* ===================== NexarPay — Solicitações de Pagamento (visão por perfil, formulários, aprovação, linha do tempo) ===================== */
 
-// Páginas de módulo (Solicitações > Produtos e Serviços, Reembolso, Freelancer, Rescisões, Interno): mesmo modelo da página Solicitações, filtrado por tipo
+// Páginas de módulo (Solicitações > Produtos e Serviços, Reembolso, Freelancer, Rescisão/Férias, Interno): mesmo modelo da página Solicitações, filtrado por tipo
 const SOL_MODULOS = [
   { id: 'sol_fornecedor', tipo: 'fornecedor', label: 'Produtos e Serviços', ico: 'truck' },
   { id: 'sol_reembolso', tipo: 'reembolso', label: 'Reembolso', ico: 'repeat' },
   { id: 'sol_freelancer', tipo: 'freelancer', label: 'Freelancer', ico: 'users' },
-  { id: 'sol_rescisao', tipo: 'rescisao', label: 'Rescisões', ico: 'userX' },
+  { id: 'sol_rescisao', tipo: 'rescisao', label: 'Rescisão/Férias', ico: 'userX' },
   { id: 'sol_grupo', tipo: 'grupo', label: 'Interno', ico: 'building' },
 ];
 const solModuloDaPagina = (id) => SOL_MODULOS.find(m => m.id === id) || null;
@@ -196,7 +196,7 @@ const KB_FLUXO = {
 };
 const KB_ICO_TIPO = { fornecedor: 'truck', reembolso: 'repeat', freelancer: 'users', rescisao: 'userX', grupo: 'building' };
 const KB_MODALIDADE = { presencial: 'Presencial', home_office: 'Home office', hibrido: 'Híbrido' };
-const KB_RESC_TIPO = { pedido_dispensa: 'Pedido de Dispensa', dispensado: 'Dispensado' };
+const KB_RESC_TIPO = { pedido_dispensa: 'Pedido de Dispensa', dispensado: 'Dispensado', ferias: 'Férias' };
 function kbCorta(t, n) { t = String(t || '').trim().replace(/\s+/g, ' '); return t.length > n ? t.slice(0, n - 1).trimEnd() + '…' : t; }
 function kbDm(iso) { return iso ? fmtDate(iso).slice(0, 5) : ''; }
 // prazo de pagamento: "vence em 3 dias", "atrasada", "pago"…
@@ -375,7 +375,7 @@ function openTipoSolicitacao() {
         ${DB.user && DB.user.perfil === 'rh' ? '' : `<div class="type-card" data-tipo="fornecedor">${icon('truck')}<strong>PRODUTOS E SERVIÇOS</strong><span>Pagamento a um fornecedor ou reembolso a um cliente, vinculado a um Pedido.</span></div>`}
         <div class="type-card" data-tipo="reembolso">${icon('repeat')}<strong>REEMBOLSO</strong><span>Despesa paga por você (alimentação, transporte, hospedagem…) com recibo ou nota fiscal.</span></div>
         <div class="type-card" data-tipo="freelancer">${icon('users')}<strong>FREELANCER</strong><span>Contratação de profissional autônomo por períodos pré-determinados.</span></div>
-        ${podeSolicitarRescisao() ? `<div class="type-card" data-tipo="rescisao">${icon('userX')}<strong>RESCISÕES</strong><span>Custos de desligamento de colaboradores (aviso prévio, férias, FGTS…).</span></div>` : ''}
+        ${podeSolicitarRescisao() ? `<div class="type-card" data-tipo="rescisao">${icon('userX')}<strong>RESCISÃO/FÉRIAS</strong><span>Custos de Férias e desligamento de colaboradores (aviso prévio, férias, FGTS…).</span></div>` : ''}
         <div class="type-card" data-tipo="grupo">${icon('building')}<strong>INTERNO</strong><span>Despesa interna da empresa ou Grupo, dentro do orçamento do departamento.</span></div>
       </div>
     </div>`, { size: 'lg' });
@@ -443,12 +443,12 @@ function openSolicitacaoForm(tipo, existente) {
       <div class="form-field"><label>Conta</label><input class="input" name="conta" value="${escapeHtml(d.conta || '')}"/></div>
       <div class="form-field"><label>CPF ou CNPJ</label><input class="input" name="cpfCnpj" value="${escapeHtml(d.cpfCnpj || '')}"/></div>`;
   } else if (tipo === 'rescisao') {
-    titulo = 'Rescisões';
+    titulo = 'Rescisão/Férias';
     campos = `${fSolicitante}${fEmail}${fDep}${fEmpresa}
-      <div class="form-field"><label>Nome do colaborador <span class="req">*</span></label><input class="input" name="nomeColaborador" required maxlength="120" placeholder="Nome completo do colaborador desligado" value="${escapeHtml(d.nomeColaborador || '')}"/></div>
-      <div class="form-field"><label>Tipo <span class="req">*</span></label><select name="tipoRescisao" required><option value="">Selecione…</option>${selectOptions([{ id: 'pedido_dispensa', nome: 'Pedido de Dispensa' }, { id: 'dispensado', nome: 'Dispensado' }], d.tipoRescisao)}</select></div>
+      <div class="form-field"><label>Nome do colaborador <span class="req">*</span></label><input class="input" name="nomeColaborador" required maxlength="120" placeholder="Nome completo do colaborador" value="${escapeHtml(d.nomeColaborador || '')}"/></div>
+      <div class="form-field"><label>Tipo <span class="req">*</span></label><select name="tipoRescisao" required><option value="">Selecione…</option>${selectOptions([{ id: 'pedido_dispensa', nome: 'Pedido de Dispensa' }, { id: 'dispensado', nome: 'Dispensado' }, { id: 'ferias', nome: 'Férias' }], d.tipoRescisao)}</select></div>
       ${fData('Data de Pagamento')}
-      <div class="form-field full"><label>Motivo do Desligamento <span class="req">*</span></label><textarea name="descricao" rows="3" required placeholder="Descreva o motivo do desligamento e o que compõe o valor (aviso prévio, férias, FGTS…)">${escapeHtml(d.descricao || '')}</textarea></div>
+      <div class="form-field full" id="motivoDeslig" ${d.tipoRescisao === 'ferias' ? 'hidden style="display:none"' : ''}><label>Motivo do Desligamento <span class="req">*</span></label><textarea name="descricao" rows="3" ${d.tipoRescisao === 'ferias' ? 'disabled' : 'required'} placeholder="Descreva o motivo do desligamento e o que compõe o valor (aviso prévio, férias, FGTS…)">${escapeHtml(d.descricao || '')}</textarea></div>
       ${fValor}
       ${fAnexos('Anexos', false)}`;
   } else if (tipo === 'freelancer') {
@@ -491,6 +491,13 @@ function openSolicitacaoForm(tipo, existente) {
 
   const form = document.getElementById('solForm');
   attachMoneyMask(document.getElementById('valorInput'));
+  // Rescisão/Férias: ao escolher "Férias" o Motivo do Desligamento some e fica desabilitado (não é enviado nem exigido)
+  const selTipoResc = form.querySelector('select[name="tipoRescisao"]'), boxMotivo = document.getElementById('motivoDeslig');
+  if (selTipoResc && boxMotivo) {
+    const ta = boxMotivo.querySelector('textarea');
+    const ajustaMotivo = () => { const f = selTipoResc.value === 'ferias'; boxMotivo.hidden = f; boxMotivo.style.display = f ? 'none' : ''; ta.disabled = f; ta.required = !f; if (f) ta.value = ''; };
+    selTipoResc.addEventListener('change', ajustaMotivo);
+  }
   // Nº do Pedido (Produtos e Serviços): vários números, cada um com X para remover
   let refs = tipo === 'fornecedor' ? (Array.isArray(d.referencias) ? d.referencias.slice() : String(d.numeroOcPi || '').split(',').map(x => x.trim()).filter(Boolean)) : [];
   const refInput = document.getElementById('refInput'), refList = document.getElementById('refList');
@@ -622,10 +629,10 @@ async function openSolicitacao(id) {
   let campos = '';
   if (s.tipo === 'fornecedor') campos = campo('Título', d.titulo, true) + campo('Solicitante', d.solicitante) + campo('E-mail', s.email) + campo('Departamento', depNome(s.departamentoId)) + campo('Fornecedor', d.fornecedor) + campo('Cliente', d.cliente) + campo('Empresa', d.empresa) + campo('Nº do Pedido', d.numeroOcPi) + campo('Erro interno?', simNao(d.erroInterno));
   else if (s.tipo === 'freelancer') campos = campo('Freelancer', d.nomeFreelancer, true) + campo('Solicitante', d.solicitante) + campo('E-mail', s.email) + campo('Departamento', depNome(s.departamentoId)) + campo('Empresa', d.empresa) + campo('Modalidade', ({ presencial: 'Presencial', home_office: 'Home office', hibrido: 'Híbrido' })[d.modalidade]) + campo('Recorrente?', simNao(d.recorrente)) + campo('Período', fmtDate(d.dataInicio) + ' a ' + fmtDate(d.dataFim)) + campo('Banco', d.banco) + campo('Agência', d.agencia) + campo('C/C', d.conta) + campo('CNPJ', d.cpfCnpj) + (d.rh ? campo('RH — profissional contratado?', simNao(d.rh.contratado)) + campo('Data de contratação', fmtDate(d.rh.dataContratacao)) + campo('Onboarding previsto', fmtDate(d.rh.dataOnboarding)) : '');
-  else if (s.tipo === 'rescisao') campos = campo('Nome do colaborador', d.nomeColaborador, true) + campo('Tipo', ({ pedido_dispensa: 'Pedido de Dispensa', dispensado: 'Dispensado' })[d.tipoRescisao], true) + campo('Solicitante', d.solicitante) + campo('E-mail', s.email) + campo('Departamento', depNome(s.departamentoId)) + campo('Empresa', d.empresa);
+  else if (s.tipo === 'rescisao') campos = campo('Nome do colaborador', d.nomeColaborador, true) + campo('Tipo', ({ pedido_dispensa: 'Pedido de Dispensa', dispensado: 'Dispensado', ferias: 'Férias' })[d.tipoRescisao], true) + campo('Solicitante', d.solicitante) + campo('E-mail', s.email) + campo('Departamento', depNome(s.departamentoId)) + campo('Empresa', d.empresa);
   else if (s.tipo === 'reembolso') campos = campo('Nome', d.nome) + campo('E-mail', s.email) + campo('Cliente', d.cliente) + campo('Reembolsado pelo cliente?', simNao(d.reembolsadoCliente)) + campo('Departamento', depNome(s.departamentoId)) + campo('Categoria da despesa', d.categoriaDespesa) + campo('Empresa', d.empresa) + campo('Dados bancários', [d.banco && 'Banco ' + d.banco, d.agencia && 'Ag. ' + d.agencia, d.conta && 'C/C ' + d.conta, d.cpfCnpj && 'CPF/CNPJ ' + d.cpfCnpj].filter(Boolean).join(' · '), true);
   else campos = campo('Título', d.titulo, true) + campo('Solicitante', d.solicitante) + campo('E-mail', s.email) + campo('Departamento', depNome(s.departamentoId)) + campo('Fornecedor', d.fornecedor) + campo('Empresa', d.empresa) + campo('Categoria', d.categoria) + campo('Erro interno?', simNao(d.erroInterno));
-  campos += campo('Valor Total', fmtBRL(s.valor)) + campo(s.tipo === 'reembolso' ? 'Data' : 'Data do Pagamento', fmtDate(s.dataPagamento)) + campo(({ freelancer: 'Motivo da contratação', rescisao: 'Motivo do desligamento' })[s.tipo] || 'Descrição da despesa', d.descricao, true);
+  campos += campo('Valor Total', fmtBRL(s.valor)) + campo(s.tipo === 'reembolso' ? 'Data' : 'Data do Pagamento', fmtDate(s.dataPagamento)) + (s.tipo === 'rescisao' && d.tipoRescisao === 'ferias' ? '' : campo(({ freelancer: 'Motivo da contratação', rescisao: 'Motivo do desligamento' })[s.tipo] || 'Descrição da despesa', d.descricao, true));
 
   const anexosHtml = (s.anexos || []).length ? `<div class="attach-list">${s.anexos.map(a => `<div class="attach-item">${ICONS.file}<span class="nm">${escapeHtml(a.nome)}</span><span class="sz">${humanFileSize(a.tamanho)}</span><a href="${fileUrl(a.id)}" target="_blank">Abrir</a></div>`).join('')}</div>` : '<div class="cell-dim" style="font-size:12px;">Nenhum documento anexado.</div>';
 

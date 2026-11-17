@@ -97,9 +97,9 @@ TIPOS_SOLICITACAO = {
     'reembolso': 'Reembolso',
     'grupo': 'Interno',
     'freelancer': 'Freelancer',
-    'rescisao': 'Rescisões',
+    'rescisao': 'Rescisão/Férias',
 }
-RESCISAO_TIPOS = {'pedido_dispensa': 'Pedido de Dispensa', 'dispensado': 'Dispensado'}
+RESCISAO_TIPOS = {'pedido_dispensa': 'Pedido de Dispensa', 'dispensado': 'Dispensado', 'ferias': 'Férias'}
 # prazo (dias corridos) para anexar o documento fiscal após o encerramento
 PRAZO_DOC_FISCAL = {'grupo': 7, 'fornecedor': 3, 'reembolso': 1}
 MSG_BLOQUEIO = 'Atenção!!! Bloqueio devido a falta do envio do documento fiscal. Verifique seus lançamentos já aprovados'
@@ -1193,7 +1193,7 @@ def gerar_recibo_pdf(conn, sol):
         y -= 15
     y -= 18
     tipo = sol['tipo']
-    titulo_sec = {'fornecedor': 'PRODUTOS E SERVIÇOS', 'reembolso': 'REEMBOLSO', 'grupo': 'SOLICITAÇÃO DE PAGAMENTO — ' + grupo_nome(conn).upper(), 'freelancer': 'FREELANCER', 'rescisao': 'RESCISÃO'}[tipo]
+    titulo_sec = {'fornecedor': 'PRODUTOS E SERVIÇOS', 'reembolso': 'REEMBOLSO', 'grupo': 'SOLICITAÇÃO DE PAGAMENTO — ' + grupo_nome(conn).upper(), 'freelancer': 'FREELANCER', 'rescisao': 'RESCISÃO/FÉRIAS'}[tipo]
     ops.append(('text', L, y, 11.5, True, titulo_sec))
     y -= 22
 
@@ -1229,10 +1229,11 @@ def gerar_recibo_pdf(conn, sol):
         campo(L, y, 'E-mail:', sol['email']); campo(col2, y, 'Fornecedor:', d.get('fornecedor'), 90); y -= 15
         campo(L, y, 'Empresa:', d.get('empresa')); campo(col2, y, 'Categoria:', d.get('categoria'), 90); y -= 15
     y -= 4
-    ops.append(('text', L, y, 10, True, {'freelancer': 'Motivo da contratação:', 'rescisao': 'Motivo do desligamento:'}.get(tipo, 'Descrição:')))
-    y -= 14
-    for ln in _wrap(d.get('descricao') or '—', 10, R - L)[:14]:
-        ops.append(('text', L, y, 10, False, ln)); y -= 13
+    if not (tipo == 'rescisao' and d.get('tipoRescisao') == 'ferias'):  # Férias não tem motivo de desligamento
+        ops.append(('text', L, y, 10, True, {'freelancer': 'Motivo da contratação:', 'rescisao': 'Motivo do desligamento:'}.get(tipo, 'Descrição:')))
+        y -= 14
+        for ln in _wrap(d.get('descricao') or '—', 10, R - L)[:14]:
+            ops.append(('text', L, y, 10, False, ln)); y -= 13
     y = min(y, 470)
     ops.append(('line', L - 15, y - 6, R + 15, y - 6, 1.6))
     y -= 40
@@ -2669,7 +2670,10 @@ def validar_solicitacao(conn, user, body):
             raise ApiError(400, 'Informe no máximo 30 números de pedido.')
         d['referencias'] = refs
         d['numeroOcPi'] = ', '.join(refs)
-    faltando = [c for c in CAMPOS_OBRIGATORIOS[tipo] if d.get(c) in (None, '', [])]
+    if tipo == 'rescisao' and d.get('tipoRescisao') == 'ferias':
+        d['descricao'] = ''  # Férias: sem motivo de desligamento
+    obrig = [c for c in CAMPOS_OBRIGATORIOS[tipo] if not (tipo == 'rescisao' and d.get('tipoRescisao') == 'ferias' and c == 'descricao')]
+    faltando = [c for c in obrig if d.get(c) in (None, '', [])]
     if tipo == 'reembolso' and not (body.get('anexos') or []):
         faltando.append('reciboNotaFiscal')
     if faltando:
@@ -2680,7 +2684,7 @@ def validar_solicitacao(conn, user, body):
         validar_freelancer(user, d)
     if tipo == 'rescisao':
         if d.get('tipoRescisao') not in RESCISAO_TIPOS:
-            raise ApiError(400, 'Informe o tipo: Pedido de Dispensa ou Dispensado.')
+            raise ApiError(400, 'Informe o tipo: Pedido de Dispensa, Dispensado ou Férias.')
         if not pode_solicitar_rescisao(user):
             raise ApiError(403, 'Somente o RH (RH 1 ou RH 2) e o Financeiro podem solicitar Rescisões.')
     try:
