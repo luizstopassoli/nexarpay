@@ -139,7 +139,7 @@ function paintSolicitacoes(pageId) {
     ${modulo ? '' : acessoRapidoHtml()}
     ${view === 'kanban' ? kanbanHtml(all, st, modulo) : `<div class="vw-bar">${vwToggleHtml('lista')}</div>${blocos.join('')}${resumo}`}
   `;
-  const kbBoard = el.querySelector('.kb-board'); if (kbBoard) kbBoard.scrollLeft = scrollKb;
+  const kbBoard = el.querySelector('.kb-board'); if (kbBoard) { kbBoard.scrollLeft = scrollKb; kbAjustaAltura(kbBoard); }
 
   el.querySelectorAll('[data-qa]').forEach(t => {
     const abrir = () => navigateTo(t.dataset.qa);
@@ -162,7 +162,18 @@ function paintSolicitacoes(pageId) {
 function solView() { try { return localStorage.getItem('nexarpay.solView') === 'kanban' ? 'kanban' : 'lista'; } catch (e) { return 'lista'; } }
 function setSolView(v) { try { localStorage.setItem('nexarpay.solView', v); } catch (e) { /* sem armazenamento: vale só nesta sessão */ } }
 const KB_ROTULO = { fiscal: 'Aprovação Fiscal', aprovacao1: 'Aprovação 1', aprovacao2: 'Aprovação 2', rh: 'RH 1', rh2: 'RH 2', financeiro: 'Financeiro', alteracao: 'Alteração solicitada', encerrada: 'Encerrada', reprovada: 'Reprovada' };
-const KB_MAX_CARTOES = 25;
+const KB_MAX_CARTOES = 100;
+const KB_VISIVEIS = 5;  // cartões visíveis por coluna; acima disso a coluna ganha barra de rolagem
+// Ajusta a altura de cada coluna para exatamente KB_VISIVEIS cartões (altura real, pois os cartões variam por módulo)
+function kbAjustaAltura(raiz) {
+  (raiz || document).querySelectorAll('.kb-cards').forEach(box => {
+    box.style.maxHeight = '';
+    const cs = box.children;
+    if (cs.length <= KB_VISIVEIS) return;
+    const fim = cs[KB_VISIVEIS - 1], mg = parseFloat(getComputedStyle(fim).marginBottom) || 0;
+    box.style.maxHeight = Math.ceil(fim.offsetTop - box.offsetTop + fim.offsetHeight + mg) + 'px';
+  });
+}
 function vwToggleHtml(view) {
   return `<div class="period-filter" data-vw role="group" aria-label="Visualização"><button type="button" data-vw="lista" class="${view === 'lista' ? 'active' : ''}">${ICONS.list}Lista</button><button type="button" data-vw="kanban" class="${view === 'kanban' ? 'active' : ''}">${ICONS.layers}Kanban</button></div>`;
 }
@@ -260,7 +271,7 @@ function kbAreaHtml(all, st, modulo) {
     const vis = c.lista.slice(0, KB_MAX_CARTOES), resto = (c.total !== undefined ? c.total : c.lista.length) - vis.length;
     return `<div class="kb-col"><div class="kb-head"><h3><span class="kb-dot" style="background:${c.cor}"></span>${escapeHtml(c.t)}</h3><span class="kb-count">${c.lista.length}</span></div>
       <div class="kb-sum">${c.sub ? escapeHtml(c.sub) + ' · ' : ''}${fmtBRL(soma(c.lista))}</div>
-      ${vis.length ? vis.map(x => kbCartao(x, modulo)).join('') : '<div class="kb-empty">Nenhuma solicitação</div>'}
+      <div class="kb-cards">${vis.length ? vis.map(x => kbCartao(x, modulo)).join('') : '<div class="kb-empty">Nenhuma solicitação</div>'}</div>
       ${resto > 0 ? `<div class="kb-more" ${c.ver ? `data-kb-ver="${c.ver}" role="button" tabindex="0"` : ''}>${c.ver ? `Ver todas as ${c.total} na lista` : `+ ${resto} na lista`}</div>` : (c.ver && c.total > c.lista.length ? `<div class="kb-more" data-kb-ver="${c.ver}" role="button" tabindex="0">Ver todas as ${c.total} na lista</div>` : '')}
     </div>`;
   }).join('');
@@ -294,7 +305,7 @@ function wireKanban(el, all, st, modulo, repaint) {
     area.querySelectorAll('[data-kb-ver]').forEach(c => { const ir = () => { st.status = c.dataset.kbVer; st.page = 1; setSolView('lista'); repaint(); }; c.addEventListener('click', ir); ativa(c, ir); });
     area.querySelectorAll('[data-kb-lane]').forEach(b => b.addEventListener('click', () => { st.lane = st.lane === b.dataset.kbLane ? null : b.dataset.kbLane; rer(); }));
   };
-  const rer = () => { const sl = (area.querySelector('.kb-board') || {}).scrollLeft || 0; area.innerHTML = kbAreaHtml(all, st, modulo); const b = area.querySelector('.kb-board'); if (b) b.scrollLeft = sl; ligar(); };
+  const rer = () => { const sl = (area.querySelector('.kb-board') || {}).scrollLeft || 0; area.innerHTML = kbAreaHtml(all, st, modulo); const b = area.querySelector('.kb-board'); if (b) b.scrollLeft = sl; kbAjustaAltura(area); ligar(); };
   kb.querySelector('[data-kf="search"]').addEventListener('input', debounce(e => { st.search = e.target.value; rer(); }, 200));
   kb.querySelector('[data-kf="dep"]').addEventListener('change', e => { st.dep = e.target.value; rer(); });
   const ft = kb.querySelector('[data-kf="tipo"]'); if (ft) ft.addEventListener('change', e => { st.tipo = e.target.value; rer(); });

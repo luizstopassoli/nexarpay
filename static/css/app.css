@@ -592,7 +592,7 @@ table.data-table tbody tr:last-child td{ border-bottom:none; }
 }
 .login-credit{
   position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:1;
-  color:var(--brand-green); font-size:12px; font-weight:600; background:transparent;
+  color:#0a0a0f; font-size:12px; font-weight:600; background:transparent;
   pointer-events:none; user-select:none; white-space:nowrap;
 }
 .login-hint-box{
@@ -807,6 +807,7 @@ body:not(.perfil-admin) .scenario-radio{ pointer-events:none; cursor:default; op
 .vw-bar .period-filter svg{ width:14px; height:14px; }
 .kb-board{ display:grid; grid-template-columns:repeat(var(--kb-cols, 5), 300px); gap:14px; align-items:start; overflow-x:auto; padding-bottom:8px; }
 .kb-col{ background:var(--card-alt); border:1px solid var(--border); border-radius:var(--radius); padding:12px 10px 10px; min-width:0; }
+.kb-cards{ overflow-y:auto; overscroll-behavior:contain; padding:2px 4px 0 2px; margin:0 -4px 0 -2px; scrollbar-width:thin; }
 .kb-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin:0 4px 2px; }
 .kb-head h3{ font-size:13px; font-weight:800; display:flex; align-items:center; gap:8px; }
 .kb-dot{ width:8px; height:8px; border-radius:50%; flex:none; }
