@@ -2409,7 +2409,7 @@ def eh_rh2(u):
 
 
 def pode_solicitar_rescisao(u):
-    return u['perfil'] in ('admin', 'financeiro') or eh_rh1(u) or eh_rh2(u)
+    return u['perfil'] in ('admin', 'financeiro', 'diretor') or eh_rh1(u) or eh_rh2(u)
 
 
 def pode_ver_todos_deps(u):
@@ -2506,6 +2506,37 @@ def sol_out_tv(r):
 def add_hist(conn, sol_id, user, acao, etapa=None, justificativa=None, detalhes=None):
     conn.execute('INSERT INTO historico(solicitacao_id,data,user_id,user_nome,acao,etapa,justificativa,detalhes) VALUES(?,?,?,?,?,?,?,?)',
                  (sol_id, now_iso(), user['id'] if user else None, user['nome'] if user else 'Sistema', acao, etapa, justificativa, j(detalhes) if detalhes is not None else None))
+
+
+def par_diretoria(conn, user):
+    """Diretor(a) que faz a própria solicitação: devolve (diretor1_id, diretor2_id), com ele ocupando um dos dois lugares.
+    Vale o que estiver no cadastro dele; senão, o par de Diretores que mais aparece nos cadastros dos demais usuários."""
+    me, d1, d2 = user['id'], user['diretor1_id'], user['diretor2_id']
+    if d1 and d2 and d1 != d2 and me in (d1, d2):
+        return d1, d2
+    cont = {}
+    for u in conn.execute('SELECT diretor1_id AS a, diretor2_id AS b FROM users WHERE ativo=1 AND id<>? AND (diretor1_id=? OR diretor2_id=?)', (me, me, me)):
+        if u['a'] and u['b'] and u['a'] != u['b']:
+            cont[(u['a'], u['b'])] = cont.get((u['a'], u['b']), 0) + 1
+    return max(cont, key=cont.get) if cont else None
+
+
+def auto_aprovar_diretoria(conn, sid):
+    """Se o(a) solicitante é o próprio Diretor(a) da etapa, a etapa dele é aprovada automaticamente (registrada no histórico).
+    Diretor(a) 1: pula a Aprovação 1. Diretor(a) 2: pula as Aprovações 1 e 2 (segue para o RH, no Freelancer, ou para o Financeiro).
+    Devolve o status final."""
+    while True:
+        r = conn.execute('SELECT * FROM solicitacoes WHERE id=?', (sid,)).fetchone()
+        st, sol = r['status'], r['solicitante_id']
+        if st == 'aprovacao1' and sol in (r['aprovador1_id'], r['aprovador2_id']):
+            novo, etapa = 'aprovacao2', 1
+        elif st == 'aprovacao2' and sol == r['aprovador2_id']:
+            novo, etapa = ('rh' if r['tipo'] == 'freelancer' else 'financeiro'), 2
+        else:
+            return st
+        u = conn.execute('SELECT * FROM users WHERE id=?', (sol,)).fetchone()
+        conn.execute('UPDATE solicitacoes SET status=?, atualizado_em=?, motivo_ultimo=NULL WHERE id=?', (novo, now_iso(), sid))
+        add_hist(conn, sid, u, 'aprovada', etapa, 'Aprovação automática: o(a) solicitante é o(a) Diretor(a) %d desta solicitação.' % (1 if sol == r['aprovador1_id'] else 2))
 
 
 def titulo_solicitacao(tipo, d):
@@ -2657,6 +2688,8 @@ def validar_solicitacao(conn, user, body):
         raise ApiError(403, 'O módulo Produtos e Serviços não está disponível para o perfil RH.')
     if tipo not in TIPOS_SOLICITACAO:
         raise ApiError(400, 'Tipo de solicitação inválido.')
+    if tipo == 'freelancer' and user['perfil'] == 'colaborador':
+        raise ApiError(403, 'O módulo Freelancer não está disponível para o perfil Colaborador(a).')
     d = body.get('dados') or {}
     if tipo == 'rescisao':
         d['nomeColaborador'] = re.sub(r'\s+', ' ', str(d.get('nomeColaborador') or '')).strip()[:120]  # obrigatório: colaborador a quem o pedido se refere
@@ -2686,7 +2719,7 @@ def validar_solicitacao(conn, user, body):
         if d.get('tipoRescisao') not in RESCISAO_TIPOS:
             raise ApiError(400, 'Informe o tipo: Pedido de Dispensa, Dispensado ou Férias.')
         if not pode_solicitar_rescisao(user):
-            raise ApiError(403, 'Somente o RH (RH 1 ou RH 2) e o Financeiro podem solicitar Rescisões.')
+            raise ApiError(403, 'Somente o RH (RH 1 ou RH 2), o Financeiro e a Diretoria podem solicitar Rescisão/Férias.')
     try:
         valor = float(d.get('valor'))
     except Exception:
@@ -2706,6 +2739,9 @@ def validar_solicitacao(conn, user, body):
     if not dep:
         raise ApiError(400, 'Informe o departamento.')
     if tipo == 'rescisao':  # qualquer departamento cadastrado (o RH desliga gente de todas as áreas)
+        if not conn.execute('SELECT 1 FROM departamentos WHERE id=? AND ativo=1', (dep,)).fetchone():
+            raise ApiError(400, 'Departamento inválido.')
+    elif user['perfil'] == 'diretor':  # a Diretoria solicita para qualquer departamento cadastrado
         if not conn.execute('SELECT 1 FROM departamentos WHERE id=? AND ativo=1', (dep,)).fetchone():
             raise ApiError(400, 'Departamento inválido.')
     elif user['perfil'] != 'admin' and dep not in deps_do_usuario(user):
@@ -3869,11 +3905,17 @@ class Handler(BaseHTTPRequestHandler):
             if bf['bloqueado']:
                 raise ApiError(423, MSG_BLOQUEIO_FREELA, {'travaFreelancer': bf})
         tipo, d, valor, email, dep = validar_solicitacao(conn, user, body)
-        d1, d2 = user['diretor1_id'], user['diretor2_id']
-        if not d1 or not d2:
-            raise ApiError(400, 'Seu perfil não tem Diretor(a) 1 e Diretor(a) 2 definidos. Peça ao Administrador para configurar seus aprovadores.')
-        if user['id'] in (d1, d2):
-            raise ApiError(400, 'Você não pode ser o próprio aprovador. Peça ao Administrador para definir outros Diretores no seu perfil.')
+        if user['perfil'] == 'diretor':  # Diretor(a) solicita: a etapa dele é aprovada automaticamente
+            par = par_diretoria(conn, user)
+            if not par:
+                raise ApiError(400, 'Não foi possível identificar o Diretor(a) 1 e o Diretor(a) 2. Peça ao Administrador para defini-los no seu cadastro (um deles é você).')
+            d1, d2 = par
+        else:
+            d1, d2 = user['diretor1_id'], user['diretor2_id']
+            if not d1 or not d2:
+                raise ApiError(400, 'Seu perfil não tem Diretor(a) 1 e Diretor(a) 2 definidos. Peça ao Administrador para configurar seus aprovadores.')
+            if user['id'] in (d1, d2):
+                raise ApiError(400, 'Você não pode ser o próprio aprovador. Peça ao Administrador para definir outros Diretores no seu perfil.')
         for did in (d1, d2):
             if not conn.execute('SELECT 1 FROM users WHERE id=? AND ativo=1', (did,)).fetchone():
                 raise ApiError(400, 'Um dos aprovadores definidos no seu perfil está inativo. Peça ao Administrador para revisar.')
@@ -3902,15 +3944,11 @@ class Handler(BaseHTTPRequestHandler):
             conn.execute('UPDATE solicitacoes SET doc_fiscal=? WHERE id=?', (j(nf_doc), sid))
         conn.execute('UPDATE solicitacoes SET alertas=? WHERE id=?', (j(alertas), sid))
         add_hist(conn, sid, user, 'criada', {'rescisao': ETAPA_RH, 'reembolso': ETAPA_FISCAL}.get(tipo, 1), None, {'alertas': [a['mensagem'] for a in alertas]} if alertas else None)
+        status_final = auto_aprovar_diretoria(conn, sid)
         conn.commit()
         self.audit(conn, user, 'solicitacao.criada', numero, {'tipo': tipo, 'valor': valor, 'departamento': dep,
                                                               'duplicidadeConfirmada': any(a['tipo'] == 'duplicidade' for a in alertas), 'estouroOrcamento': any(a.get('estouro') for a in alertas)})
-        if tipo == 'rescisao':
-            self.notificar_rh(conn, sid)
-        elif tipo == 'reembolso':
-            self.notificar_fiscal(conn, sid)
-        else:
-            self.notificar_aprovador(conn, sid, d1, 1)
+        self.notificar_status(conn, sid, status_final)
         return self.send_json({'solicitacao': sol_out(conn, conn.execute('SELECT * FROM solicitacoes WHERE id=?', (sid,)).fetchone(), True)}, 201)
 
     def sol_editar(self, conn, user, r, body):
@@ -3943,14 +3981,10 @@ class Handler(BaseHTTPRequestHandler):
         conn.execute('UPDATE solicitacoes SET alertas=? WHERE id=?', (j(alertas), r['id']))
         add_hist(conn, r['id'], user, 'editada', None, body.get('comentario') or None, diff)
         add_hist(conn, r['id'], user, 'reenviada', {'aprovacao1': 1, 'aprovacao2': 2, 'rh': ETAPA_RH, 'fiscal': ETAPA_FISCAL}[novo_status])
+        novo_status = auto_aprovar_diretoria(conn, r['id'])
         conn.commit()
         self.audit(conn, user, 'solicitacao.editada', r['numero'], {'campos': sorted(diff), 'valorDe': r['valor'], 'valorPara': valor})
-        if novo_status == 'rh':
-            self.notificar_rh(conn, r['id'])
-        elif novo_status == 'fiscal':
-            self.notificar_fiscal(conn, r['id'])
-        else:
-            self.notificar_aprovador(conn, r['id'], r['aprovador1_id'] if novo_status == 'aprovacao1' else r['aprovador2_id'], 1 if novo_status == 'aprovacao1' else 2)
+        self.notificar_status(conn, r['id'], novo_status)
         return self.send_json({'solicitacao': sol_out(conn, conn.execute('SELECT * FROM solicitacoes WHERE id=?', (r['id'],)).fetchone(), True)})
 
     def sol_excluir(self, conn, user, r):
@@ -4048,8 +4082,9 @@ class Handler(BaseHTTPRequestHandler):
             antigos = [a for a in pj(r['alertas'], []) if a.get('tipo') == 'duplicidade']
             novos = _orcamento(conn, r['tipo'], pj(r['dados'], {}), r['valor'], r['departamento_id'], r['id'])
             conn.execute('UPDATE solicitacoes SET alertas=? WHERE id=?', (j(antigos + novos), r['id']))
+            novo = auto_aprovar_diretoria(conn, r['id'])  # solicitante Diretor(a): a etapa dele é aprovada sozinha
             conn.commit()
-            if etapa == 1:
+            if etapa == 1 or novo == 'aprovacao2':
                 self.notificar_aprovador(conn, r['id'], r['aprovador2_id'], 2)
             elif novo == 'aprovacao1':
                 self.notificar_aprovador(conn, r['id'], r['aprovador1_id'], 1)
@@ -4329,6 +4364,25 @@ class Handler(BaseHTTPRequestHandler):
             avisos = ''.join('\n⚠ ' + x['mensagem'] for x in pj(r['alertas'], []))
             enviar_email(a['email'], 'NexarPay — Solicitação %s aguarda sua aprovação (etapa %d)' % (r['numero'], etapa),
                          'Olá, %s.\n\nHá uma solicitação de pagamento aguardando sua análise (Aprovação %d).\n\n%s%s\n\nAcesse: %s\n\nAtenciosamente\nNexarPay' % (a['nome'], etapa, self.resumo_email(conn, r), ('\n\nALERTAS:' + avisos) if avisos else '', CONFIG.get('url_base')))
+
+    def notificar_status(self, conn, sid, status):
+        """Avisa quem tem a próxima ação, conforme o status em que a solicitação ficou."""
+        r = conn.execute('SELECT * FROM solicitacoes WHERE id=?', (sid,)).fetchone()
+        if not r:
+            return
+        if status == 'rh':
+            self.notificar_rh(conn, sid)
+        elif status == 'fiscal':
+            self.notificar_fiscal(conn, sid)
+        elif status == 'aprovacao1':
+            self.notificar_aprovador(conn, sid, r['aprovador1_id'], 1)
+        elif status == 'aprovacao2':
+            self.notificar_aprovador(conn, sid, r['aprovador2_id'], 2)
+        elif status == 'financeiro':
+            resumo = self.resumo_email(conn, r)
+            for f in conn.execute("SELECT email FROM users WHERE perfil='financeiro' AND ativo=1"):
+                enviar_email(f['email'], 'NexarPay — Solicitação %s aguardando o Financeiro' % r['numero'],
+                             'A solicitação abaixo foi aprovada por todas as etapas e aguarda o encerramento pelo Financeiro.\n\n%s\n\nAcesse: %s\n\nAtenciosamente\nNexarPay' % (resumo, CONFIG.get('url_base')))
 
     def notificar_rh(self, conn, sid):
         r = conn.execute('SELECT * FROM solicitacoes WHERE id=?', (sid,)).fetchone()

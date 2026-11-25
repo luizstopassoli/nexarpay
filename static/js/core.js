@@ -9,6 +9,39 @@ const fmtDateTime = (iso) => { if (!iso) return '—'; const d = new Date(iso); 
 const todayISO = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+// ---- Busca global (Solicitações e Lançamentos) ----
+// Junta TODOS os dados do registro (texto, números em vários formatos, datas dd/mm/aaaa, objetos aninhados) em um texto único,
+// sem acento e sem diferenciar maiúsculas. Todos os termos digitados precisam aparecer (E), em qualquer campo.
+const buscaNorm = (v) => String(v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').toLowerCase();
+const _buscaCache = new WeakMap();
+function buscaIndexa(obj, extras) {
+  let ix = _buscaCache.get(obj);
+  if (ix !== undefined) return ix;
+  const partes = [];
+  const num = (n) => { if (!isFinite(n)) return; const f = n.toFixed(2); partes.push(String(n), f, f.replace('.', ','), fmtBRL(n), n.toLocaleString('pt-BR', { minimumFractionDigits: 2 })); };
+  const visita = (v, prof) => {
+    if (v === null || v === undefined || v === '' || typeof v === 'boolean' || prof > 5) return;
+    if (typeof v === 'number') num(v);
+    else if (typeof v === 'string') {
+      if (v.length > 600) return;
+      partes.push(v);
+      if (/^-?\d+(\.\d+)?$/.test(v)) num(Number(v));
+      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v); if (m) partes.push(m[3] + '/' + m[2] + '/' + m[1]);
+    } else if (Array.isArray(v)) v.forEach(x => visita(x, prof + 1));
+    else if (typeof v === 'object') for (const k of Object.keys(v)) { if (!/senha|serial|password|token/i.test(k)) visita(v[k], prof + 1); }
+  };
+  visita(obj, 0);
+  (extras || []).forEach(x => visita(x, 0));
+  ix = buscaNorm(partes.join(' | '));
+  _buscaCache.set(obj, ix);
+  return ix;
+}
+function buscaCasa(obj, q, extras) {
+  const termos = buscaNorm(q).split(' ').filter(Boolean);
+  if (!termos.length) return true;
+  const ix = buscaIndexa(obj, extras);
+  return termos.every(t => ix.includes(t));
+}
 const debounce = (fn, ms = 250) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 const escapeHtml = (s) => (s === null || s === undefined) ? '' : String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const deepClone = (o) => JSON.parse(JSON.stringify(o));

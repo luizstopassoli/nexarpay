@@ -13,7 +13,7 @@ const ehPaginaSolicitacoes = (id) => id === 'solicitacoes' || !!solModuloDaPagin
 const solStates = {};  // filtros/paginação independentes por página
 function solStateDe(pageId) { return solStates[pageId] || (solStates[pageId] = { search: '', status: '', dep: '', tipo: '', page: 1, pageSize: 12 }); }
 const ABERTAS = ['fiscal', 'aprovacao1', 'aprovacao2', 'rh', 'rh2', 'financeiro'];
-function podeSolicitarRescisao() { const me = DB.user; return !!me && (me.perfil === 'admin' || me.perfil === 'financeiro' || !!me.rh1 || !!me.rh2); }
+function podeSolicitarRescisao() { const me = DB.user; return !!me && (me.perfil === 'admin' || me.perfil === 'financeiro' || me.perfil === 'diretor' || !!me.rh1 || !!me.rh2); }
 
 function aguardaMinhaAcao(s) {
   const me = DB.user;
@@ -68,7 +68,7 @@ function novaSolicitacaoDoModulo(tipo) {
   else if ((DB.trava || {}).bloqueado) { toast(DB.trava.mensagem, 'error'); return; }
   openSolicitacaoForm(tipo);
 }
-function moduloPodeCriar(tipo) { const p = DB.user && DB.user.perfil; return tipo === 'rescisao' ? podeSolicitarRescisao() : tipo === 'fornecedor' ? p !== 'rh' : true; }
+function moduloPodeCriar(tipo) { const p = DB.user && DB.user.perfil; return tipo === 'rescisao' ? podeSolicitarRescisao() : tipo === 'fornecedor' ? p !== 'rh' : tipo === 'freelancer' ? p !== 'colaborador' : true; }
 
 // Acesso rápido: um cartão por módulo (abre a página do módulo; o "+" abre direto o formulário). Só os módulos a que o perfil tem acesso.
 function acessoRapidoHtml() {
@@ -286,7 +286,7 @@ function kbAreaHtml(all, st, modulo) {
 function kanbanHtml(all, st, modulo) {
   return `<div class="kb-wrap" data-kb>
     <div class="vw-bar">${vwToggleHtml('kanban')}
-      <div class="search-box">${ICONS.search}<input data-kf="search" placeholder="Buscar por nº, título, solicitante, fornecedor…" value="${escapeHtml(st.search)}"/></div>
+      <div class="search-box">${ICONS.search}<input data-kf="search" placeholder="Buscar em tudo: nº, título, valor, solicitante, fornecedor, data…" value="${escapeHtml(st.search)}"/></div>
       <select data-kf="dep"><option value="">Departamento (todos)</option>${selectOptions(DB.departamentos, st.dep)}</select>
       ${modulo ? '' : `<select data-kf="tipo"><option value="">Tipo (todos)</option>${Object.entries(DB.tiposSolicitacao).map(([k, v]) => `<option value="${k}" ${st.tipo === k ? 'selected' : ''}>${escapeHtml(v)}</option>`).join('')}</select>`}
     </div>
@@ -336,8 +336,8 @@ function tabelaSolicitacoes(lista, resumo = false) {
 }
 function filtrarSolic(all, st, semFiltroTipo, ignorarStatus) {
   let lista = all.slice();
-  const q = st.search.trim().toLowerCase();
-  if (q) lista = lista.filter(s => [s.numero, s.titulo, s.solicitanteNome, depNome(s.departamentoId), s.dados.fornecedor, s.dados.cliente].filter(Boolean).join(' ').toLowerCase().includes(q));
+  const q = st.search.trim();
+  if (q) lista = lista.filter(s => buscaCasa(s, q, [depNome(s.departamentoId), (DB.statusLabel || {})[s.status], empresaNome((s.dados || {}).empresaId)]));
   if (st.status && !ignorarStatus) lista = lista.filter(s => st.status === 'abertas' ? ABERTAS.includes(s.status) : s.status === st.status);
   if (st.dep) lista = lista.filter(s => s.departamentoId === st.dep);
   if (st.tipo && !semFiltroTipo) lista = lista.filter(s => s.tipo === st.tipo);
@@ -385,7 +385,7 @@ function openTipoSolicitacao() {
       <div class="type-grid">
         ${DB.user && DB.user.perfil === 'rh' ? '' : `<div class="type-card" data-tipo="fornecedor">${icon('truck')}<strong>PRODUTOS E SERVIÇOS</strong><span>Pagamento a um fornecedor ou reembolso a um cliente, vinculado a um Pedido.</span></div>`}
         <div class="type-card" data-tipo="reembolso">${icon('repeat')}<strong>REEMBOLSO</strong><span>Despesa paga por você (alimentação, transporte, hospedagem…) com recibo ou nota fiscal.</span></div>
-        <div class="type-card" data-tipo="freelancer">${icon('users')}<strong>FREELANCER</strong><span>Contratação de profissional autônomo por períodos pré-determinados.</span></div>
+        ${DB.user && DB.user.perfil === 'colaborador' ? '' : `<div class="type-card" data-tipo="freelancer">${icon('users')}<strong>FREELANCER</strong><span>Contratação de profissional autônomo por períodos pré-determinados.</span></div>`}
         ${podeSolicitarRescisao() ? `<div class="type-card" data-tipo="rescisao">${icon('userX')}<strong>RESCISÃO/FÉRIAS</strong><span>Custos de Férias e desligamento de colaboradores (aviso prévio, férias, FGTS…).</span></div>` : ''}
         <div class="type-card" data-tipo="grupo">${icon('building')}<strong>INTERNO</strong><span>Despesa interna da empresa ou Grupo, dentro do orçamento do departamento.</span></div>
       </div>

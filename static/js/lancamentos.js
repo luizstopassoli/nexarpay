@@ -6,8 +6,8 @@ function podeEditarLancamento(l) { if (anoFechado(l.ano)) return false; if (isAd
 
 function filteredLaunches() {
   let list = DB.launches.slice();
-  const q = lancState.search.trim().toLowerCase();
-  if (q) list = list.filter(l => [l.descricao, l.fornecedor, l.usadoPor, l.setor, l.categoria, l.solicitacaoNumero, l.cliente].filter(Boolean).join(' ').toLowerCase().includes(q));
+  const q = lancState.search.trim();
+  if (q) list = list.filter(l => buscaCasa(l, q, [depNome(l.departamentoId), empresaNome(l.empresaId)]));
   if (lancState.categoria) list = list.filter(l => l.categoria === lancState.categoria);
   if (lancState.empresa) list = list.filter(l => l.empresa === lancState.empresa);
   if (lancState.ano) list = list.filter(l => String(l.ano) === lancState.ano);
@@ -37,7 +37,7 @@ function renderLancamentos() {
     </div>
     <div class="card table-card anim-in">
       <div class="table-toolbar">
-        <div class="search-box">${ICONS.search}<input id="lancSearch" placeholder="Buscar por descrição, fornecedor, nº da solicitação…" value="${escapeHtml(lancState.search)}"/></div>
+        <div class="search-box">${ICONS.search}<input id="lancSearch" placeholder="Buscar em tudo: descrição, valor, fornecedor, nº, data…" value="${escapeHtml(lancState.search)}"/></div>
         <select id="filtDep"><option value="">Departamento (todos)</option>${selectOptions(deps, lancState.dep)}</select>
         <select id="filtCategoria"><option value="">Categoria (todas)</option>${selectOptions(DB.properties.categorias || [], lancState.categoria)}</select>
         <select id="filtAno"><option value="">Ano (todos)</option>${availableYears().map(y => `<option ${String(y) === lancState.ano ? 'selected' : ''}>${y}</option>`).join('')}</select>

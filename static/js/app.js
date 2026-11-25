@@ -8,7 +8,7 @@ const PAGES = [
   { id: 'dashboard_tv', label: 'Dashboard (TV)', ico: 'tv', roles: ['admin', 'tv'], render: () => renderDashboardTV() },
   { id: 'solicitacoes', label: 'Solicitações', ico: 'send', roles: ['admin', 'diretor', 'financeiro', 'gestor', 'rh', 'colaborador'], render: () => renderSolicitacoes() },
   ...SOL_MODULOS.map(m => ({ id: m.id, label: m.label, ico: m.ico, sub: 'solicitacoes',
-    roles: m.tipo === 'rescisao' ? ['admin', 'diretor', 'financeiro', 'rh'] : m.tipo === 'fornecedor' ? ['admin', 'diretor', 'financeiro', 'gestor', 'colaborador'] : ['admin', 'diretor', 'financeiro', 'gestor', 'rh', 'colaborador'],
+    roles: m.tipo === 'rescisao' ? ['admin', 'diretor', 'financeiro', 'rh'] : m.tipo === 'fornecedor' ? ['admin', 'diretor', 'financeiro', 'gestor', 'colaborador'] : m.tipo === 'freelancer' ? ['admin', 'diretor', 'financeiro', 'gestor', 'rh'] : ['admin', 'diretor', 'financeiro', 'gestor', 'rh', 'colaborador'],
     render: () => renderSolModulo(m.id) })),
   { id: 'lancamentos', label: 'Lançamentos', ico: 'list', roles: ['admin', 'diretor', 'financeiro', 'gestor', 'rh'], render: () => renderLancamentos() },
   { id: 'orcamento', label: 'Orçamento', ico: 'budget', roles: ['admin', 'diretor', 'financeiro', 'gestor', 'rh'], render: () => renderOrcamento() },
