@@ -1212,7 +1212,9 @@ def gerar_recibo_pdf(conn, sol):
         campo(L, y, 'Nome:', d.get('nome')); y -= 15
         campo(L, y, 'E-mail:', sol['email']); campo(col2, y, 'Departamento:', dep_nome, 90); y -= 15
         campo(L, y, 'Cliente:', d.get('cliente')); campo(col2, y, 'Categoria:', d.get('categoriaDespesa'), 90); y -= 15
-        campo(L, y, 'Empresa:', d.get('empresa')); campo(col2, y, 'Reemb. cliente:', 'Sim' if d.get('reembolsadoCliente') else 'Não', 90); y -= 15
+        campo(L, y, 'Empresa:', d.get('empresa')); campo(col2, y, 'Reemb. cliente:', 'Sim' if d.get('reembolsadoCliente') == 'sim' else 'Não', 90); y -= 15
+        if d.get('reembolsadoCliente') == 'sim' and d.get('numeroOcPi'):
+            campo(L, y, 'Nº do Pedido:', d.get('numeroOcPi')); y -= 15
     elif tipo == 'freelancer':
         campo(L, y, 'Freelancer:', d.get('nomeFreelancer')); y -= 15
         campo(L, y, 'Solicitante:', d.get('solicitante')); campo(col2, y, 'Departamento:', dep_nome, 90); y -= 15
@@ -2693,7 +2695,10 @@ def validar_solicitacao(conn, user, body):
     d = body.get('dados') or {}
     if tipo == 'rescisao':
         d['nomeColaborador'] = re.sub(r'\s+', ' ', str(d.get('nomeColaborador') or '')).strip()[:120]  # obrigatório: colaborador a quem o pedido se refere
-    if tipo == 'fornecedor' and isinstance(d.get('referencias'), list):  # Nº do Pedido: vários (OC, PI, PC, PO, OP, OS…); numeroOcPi guarda a lista em texto
+    if tipo == 'reembolso' and d.get('reembolsadoCliente') != 'sim':  # Nº do Pedido só existe quando o cliente reembolsa
+        d.pop('referencias', None)
+        d.pop('numeroOcPi', None)
+    if tipo in ('fornecedor', 'reembolso') and isinstance(d.get('referencias'), list):  # Nº do Pedido: vários (OC, PI, PC, PO, OP, OS…); numeroOcPi guarda a lista em texto
         refs = []
         for x in d['referencias']:
             x = re.sub(r'\s+', ' ', str(x or '')).strip()[:60]

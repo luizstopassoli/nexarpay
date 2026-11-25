@@ -445,6 +445,9 @@ function openSolicitacaoForm(tipo, existente) {
         <label class="radio-chip"><input type="radio" name="reembolsadoCliente" value="sim" ${d.reembolsadoCliente === 'sim' ? 'checked' : ''} required/> Sim</label>
         <label class="radio-chip"><input type="radio" name="reembolsadoCliente" value="nao" ${d.reembolsadoCliente === 'nao' ? 'checked' : ''} required/> Não</label></div></div>
       ${fDep}
+      <div class="form-field full ${d.reembolsadoCliente === 'sim' ? '' : 'hidden'}" id="reembPedido"><label>Nº do Pedido</label>
+        <div class="ref-add"><input class="input" id="refInput" maxlength="60" placeholder="Ex.: OC-2026-001, PI-4587, OS-1234" autocomplete="off"/><button type="button" class="btn" id="refAddBtn">Adicionar</button></div>
+        <div class="ref-list" id="refList"></div></div>
       <div class="form-field"><label>Categoria da Despesa <span class="req">*</span></label><select name="categoriaDespesa" required><option value="">Selecione…</option>${selectOptions(P.categoriasReembolso || [], d.categoriaDespesa)}</select></div>
       ${fEmpresa}${fDesc}${fValor}${fData('Data')}
       ${fAnexos('Recibo / Nota Fiscal', true)}
@@ -510,7 +513,7 @@ function openSolicitacaoForm(tipo, existente) {
     selTipoResc.addEventListener('change', ajustaMotivo);
   }
   // Nº do Pedido (Produtos e Serviços): vários números, cada um com X para remover
-  let refs = tipo === 'fornecedor' ? (Array.isArray(d.referencias) ? d.referencias.slice() : String(d.numeroOcPi || '').split(',').map(x => x.trim()).filter(Boolean)) : [];
+  let refs = (tipo === 'fornecedor' || tipo === 'reembolso') ? (Array.isArray(d.referencias) ? d.referencias.slice() : String(d.numeroOcPi || '').split(',').map(x => x.trim()).filter(Boolean)) : [];
   const refInput = document.getElementById('refInput'), refList = document.getElementById('refList');
   const paintRefs = () => {
     if (!refList) return;
@@ -528,6 +531,13 @@ function openSolicitacaoForm(tipo, existente) {
     refInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addRef(); } });
     paintRefs();
   }
+  // Reembolso: o Nº do Pedido só aparece quando "Reembolsado pelo Cliente?" = Sim; ao voltar para Não, o campo some e a lista é descartada
+  const boxPedido = document.getElementById('reembPedido');
+  if (boxPedido) form.querySelectorAll('input[name="reembolsadoCliente"]').forEach(r => r.addEventListener('change', () => {
+    const sim = form.querySelector('input[name="reembolsadoCliente"]:checked').value === 'sim';
+    boxPedido.classList.toggle('hidden', !sim);
+    if (!sim) { refs = []; refInput.value = ''; paintRefs(); } else refInput.focus();
+  }));
   const sel = document.getElementById('solicitanteSel');
   if (sel) sel.addEventListener('change', () => { document.getElementById('solicitanteOutro').classList.toggle('hidden', sel.value !== 'outro'); });
 
@@ -561,6 +571,10 @@ function openSolicitacaoForm(tipo, existente) {
       if (refInput && refInput.value.trim()) addRef();  // digitou e esqueceu de clicar em Adicionar
       if (!refs.length) { toast('Adicione ao menos um Nº do Pedido (digite e clique em Adicionar).', 'error'); if (refInput) refInput.focus(); return; }
       dados.referencias = refs.slice();
+    }
+    if (tipo === 'reembolso') {
+      if (fd.reembolsadoCliente === 'sim') { if (refInput && refInput.value.trim()) addRef(); dados.referencias = refs.slice(); }  // digitou e esqueceu de clicar em Adicionar
+      else delete dados.referencias;
     }
     if (tipo === 'reembolso' && !anexos.length) { toast('Anexe o recibo ou a nota fiscal do reembolso.', 'error'); return; }
     if (tipo === 'freelancer') {
@@ -641,7 +655,7 @@ async function openSolicitacao(id) {
   if (s.tipo === 'fornecedor') campos = campo('Título', d.titulo, true) + campo('Solicitante', d.solicitante) + campo('E-mail', s.email) + campo('Departamento', depNome(s.departamentoId)) + campo('Fornecedor', d.fornecedor) + campo('Cliente', d.cliente) + campo('Empresa', d.empresa) + campo('Nº do Pedido', d.numeroOcPi) + campo('Erro interno?', simNao(d.erroInterno));
   else if (s.tipo === 'freelancer') campos = campo('Freelancer', d.nomeFreelancer, true) + campo('Solicitante', d.solicitante) + campo('E-mail', s.email) + campo('Departamento', depNome(s.departamentoId)) + campo('Empresa', d.empresa) + campo('Modalidade', ({ presencial: 'Presencial', home_office: 'Home office', hibrido: 'Híbrido' })[d.modalidade]) + campo('Recorrente?', simNao(d.recorrente)) + campo('Período', fmtDate(d.dataInicio) + ' a ' + fmtDate(d.dataFim)) + campo('Banco', d.banco) + campo('Agência', d.agencia) + campo('C/C', d.conta) + campo('CNPJ', d.cpfCnpj) + (d.rh ? campo('RH — profissional contratado?', simNao(d.rh.contratado)) + campo('Data de contratação', fmtDate(d.rh.dataContratacao)) + campo('Onboarding previsto', fmtDate(d.rh.dataOnboarding)) : '');
   else if (s.tipo === 'rescisao') campos = campo('Nome do colaborador', d.nomeColaborador, true) + campo('Tipo', ({ pedido_dispensa: 'Pedido de Dispensa', dispensado: 'Dispensado', ferias: 'Férias' })[d.tipoRescisao], true) + campo('Solicitante', d.solicitante) + campo('E-mail', s.email) + campo('Departamento', depNome(s.departamentoId)) + campo('Empresa', d.empresa);
-  else if (s.tipo === 'reembolso') campos = campo('Nome', d.nome) + campo('E-mail', s.email) + campo('Cliente', d.cliente) + campo('Reembolsado pelo cliente?', simNao(d.reembolsadoCliente)) + campo('Departamento', depNome(s.departamentoId)) + campo('Categoria da despesa', d.categoriaDespesa) + campo('Empresa', d.empresa) + campo('Dados bancários', [d.banco && 'Banco ' + d.banco, d.agencia && 'Ag. ' + d.agencia, d.conta && 'C/C ' + d.conta, d.cpfCnpj && 'CPF/CNPJ ' + d.cpfCnpj].filter(Boolean).join(' · '), true);
+  else if (s.tipo === 'reembolso') campos = campo('Nome', d.nome) + campo('E-mail', s.email) + campo('Cliente', d.cliente) + campo('Reembolsado pelo cliente?', simNao(d.reembolsadoCliente)) + (d.reembolsadoCliente === 'sim' && d.numeroOcPi ? campo('Nº do Pedido', d.numeroOcPi) : '') + campo('Departamento', depNome(s.departamentoId)) + campo('Categoria da despesa', d.categoriaDespesa) + campo('Empresa', d.empresa) + campo('Dados bancários', [d.banco && 'Banco ' + d.banco, d.agencia && 'Ag. ' + d.agencia, d.conta && 'C/C ' + d.conta, d.cpfCnpj && 'CPF/CNPJ ' + d.cpfCnpj].filter(Boolean).join(' · '), true);
   else campos = campo('Título', d.titulo, true) + campo('Solicitante', d.solicitante) + campo('E-mail', s.email) + campo('Departamento', depNome(s.departamentoId)) + campo('Fornecedor', d.fornecedor) + campo('Empresa', d.empresa) + campo('Categoria', d.categoria) + campo('Erro interno?', simNao(d.erroInterno));
   campos += campo('Valor Total', fmtBRL(s.valor)) + campo(s.tipo === 'reembolso' ? 'Data' : 'Data do Pagamento', fmtDate(s.dataPagamento)) + (s.tipo === 'rescisao' && d.tipoRescisao === 'ferias' ? '' : campo(({ freelancer: 'Motivo da contratação', rescisao: 'Motivo do desligamento' })[s.tipo] || 'Descrição da despesa', d.descricao, true));
 
