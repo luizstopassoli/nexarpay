@@ -103,6 +103,8 @@ function paintSolicitacoes(pageId) {
   const trava = DB.trava || {};
   const tf = DB.travaFreelancer || {};
   const pendDoc = trava.bloqueado ? (trava.pendentes || []).filter(x => !(trava.vencidas || []).find(v => v.id === x.id)) : (trava.pendentes || []);
+  const avisosNf = (DB.avisoNfFreelancer || []), idsNf = new Set(avisosNf.map(v => v.id));
+  const pendFrl = (tf.pendentes || []).filter(v => !idsNf.has(v.id));  // os já notificados pelo Financeiro aparecem no aviso vermelho
   const mostraTrava = !tipo || (tipo !== 'freelancer' && tipo !== 'rescisao'), mostraFrl = !tipo || tipo === 'freelancer';
 
   const kpis = [
@@ -127,15 +129,12 @@ function paintSolicitacoes(pageId) {
   const repaint = () => paintSolicitacoes(pageId);
 
   el.innerHTML = `
-    <div class="sol-hero anim-in">
-      <div><h2>${modulo ? escapeHtml(modulo.label) : 'Olá, ' + escapeHtml(me.nome)}</h2><div class="hint">${modulo ? 'Solicitações de pagamento deste módulo: acompanhe e crie novas' : 'Acompanhe e Realize novas Solicitações de Pagamento'}</div></div>
-      ${podeNova ? `<button class="btn btn-cta" id="btnNovaSolicitacao">${ICONS.plus}NOVA SOLICITAÇÃO</button>` : ''}
-    </div>
     ${mostraTrava && trava.bloqueado ? `<div class="alert-box">${icon('alert')}<div><strong>${escapeHtml(trava.mensagem || '')}</strong><div style="margin-top:4px;">${(trava.vencidas || []).map(v => `<a href="#" data-open-sol="${v.id}" style="color:inherit;font-weight:700;">${escapeHtml(v.numero)}</a> (prazo ${fmtDate(v.prazo)})`).join(' · ')}</div></div></div>` : ''}
     ${mostraTrava && pendDoc.length ? `<div class="alert-box warn">${icon('fileText')}<div><strong>Documento fiscal pendente</strong> em ${pendDoc.map(v => `<a href="#" data-open-sol="${v.id}" style="color:inherit;font-weight:700;">${escapeHtml(v.numero)}</a> (${v.atraso > 0 ? 'ATRASADO há ' + v.atraso + ' dia(s)' : 'até ' + fmtDate(v.prazo)})`).join(', ')}. Anexe o quanto antes: você recebe um lembrete por e-mail todos os dias até o envio.</div></div>` : ''}
     ${mostraFrl && (me.rh1 || me.rh2) && all.some(x => x.alertaTermino !== null && x.alertaTermino !== undefined) ? `<div class="alert-box warn">${icon('clock')}<div><strong>Freelancer recorrente: contrato perto do fim</strong><div style="margin-top:4px;">${all.filter(x => x.alertaTermino !== null && x.alertaTermino !== undefined).map(x => `<a href="#" data-open-sol="${x.id}" style="color:inherit;font-weight:700;">${escapeHtml(x.numero)}</a> — ${escapeHtml(x.dados.nomeFreelancer || '')} (${x.alertaTermino > 0 ? 'termina em ' + x.alertaTermino + ' dia(s)' : x.alertaTermino === 0 ? 'termina hoje' : 'terminou há ' + (-x.alertaTermino) + ' dia(s)'})`).join(' · ')}. Ajuste o valor/término ou encerre. O sistema também envia e-mail todos os dias.</div></div></div>` : ''}
-    ${mostraFrl && tf.bloqueado ? `<div class="alert-box">${icon('alert')}<div><strong>${escapeHtml(tf.mensagem || '')}</strong><div style="margin-top:4px;">${(tf.vencidas || []).map(v => `<a href="#" data-open-sol="${v.id}" style="color:inherit;font-weight:700;">${escapeHtml(v.numero)}</a> (${escapeHtml(v.nome || '')}, término ${fmtDate(v.dataFim)})`).join(' · ')}</div></div></div>` : mostraFrl && (tf.pendentes || []).length ? `<div class="alert-box warn">${icon('fileText')}<div><strong>Freelancer: Nota Fiscal pendente</strong> em ${(tf.pendentes || []).map(v => `<a href="#" data-open-sol="${v.id}" style="color:inherit;font-weight:700;">${escapeHtml(v.numero)}</a> (${v.atraso > 0 ? 'ATRASADO há ' + v.atraso + ' dia(s)' : 'até ' + fmtDate(v.dataFim)})`).join(', ')}. Anexe a NF o quanto antes: você recebe um lembrete por e-mail todos os dias até o envio.</div></div>` : ''}
-    <div class="grid ${kpis.length === 4 ? 'grid-4' : 'grid-3'} anim-in">${kpis.join('')}</div>
+    ${mostraFrl && avisosNf.length ? `<div class="alert-box">${icon('alert')}<div><strong>Atenção!</strong> <strong>Freelancer: Nota Fiscal pendente</strong> em ${avisosNf.map(v => `<a href="#" data-open-sol="${v.id}" style="color:inherit;font-weight:700;">${escapeHtml(v.numero)}</a> (${v.atraso > 0 ? 'ATRASADO há ' + v.atraso + ' dia(s)' : 'até ' + fmtDate(v.dataFim)})`).join(', ')}. Anexe a NF o quanto antes: você recebe um lembrete por e-mail todos os dias até o envio.</div></div>` : ''}
+    ${mostraFrl && tf.bloqueado ? `<div class="alert-box">${icon('alert')}<div><strong>${escapeHtml(tf.mensagem || '')}</strong><div style="margin-top:4px;">${(tf.vencidas || []).map(v => `<a href="#" data-open-sol="${v.id}" style="color:inherit;font-weight:700;">${escapeHtml(v.numero)}</a> (${escapeHtml(v.nome || '')}, término ${fmtDate(v.dataFim)})`).join(' · ')}</div></div></div>` : mostraFrl && pendFrl.length ? `<div class="alert-box warn">${icon('fileText')}<div><strong>Freelancer: Nota Fiscal pendente</strong> em ${pendFrl.map(v => `<a href="#" data-open-sol="${v.id}" style="color:inherit;font-weight:700;">${escapeHtml(v.numero)}</a> (${v.atraso > 0 ? 'ATRASADO há ' + v.atraso + ' dia(s)' : 'até ' + fmtDate(v.dataFim)})`).join(', ')}. Anexe a NF o quanto antes: você recebe um lembrete por e-mail todos os dias até o envio.</div></div>` : ''}
+    ${modulo ? '' : `<div class="grid ${kpis.length === 4 ? 'grid-4' : 'grid-3'} anim-in">${kpis.join('')}</div>`}
     ${modulo ? '' : acessoRapidoHtml()}
     ${view === 'kanban' ? kanbanHtml(all, st, modulo) : `<div class="vw-bar">${vwToggleHtml('lista')}</div>${blocos.join('')}${resumo}`}
   `;
@@ -147,8 +146,10 @@ function paintSolicitacoes(pageId) {
     t.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrir(); } });
   });
   el.querySelectorAll('[data-qa-new]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); novaSolicitacaoDoModulo(b.dataset.qaNew); }));
-  const nova = el.querySelector('#btnNovaSolicitacao');
-  if (nova) nova.addEventListener('click', () => {
+  const topo = document.getElementById('topbarRight');
+  if (topo && pageId === currentPage) topo.innerHTML = podeNova ? `<button class="btn btn-cta" id="btnNovaSolicitacao">${ICONS.plus}NOVA SOLICITAÇÃO</button>` : '';
+  const nova = document.getElementById('btnNovaSolicitacao');
+  if (nova && pageId === currentPage) nova.addEventListener('click', () => {
     if (modulo) { novaSolicitacaoDoModulo(tipo); return; }
     if (trava.bloqueado) { toast(trava.mensagem, 'error'); return; }
     openTipoSolicitacao();
@@ -163,7 +164,7 @@ function solView() { try { return localStorage.getItem('nexarpay.solView') === '
 function setSolView(v) { try { localStorage.setItem('nexarpay.solView', v); } catch (e) { /* sem armazenamento: vale só nesta sessão */ } }
 const KB_ROTULO = { fiscal: 'Aprovação Fiscal', aprovacao1: 'Aprovação 1', aprovacao2: 'Aprovação 2', rh: 'RH 1', rh2: 'RH 2', financeiro: 'Financeiro', alteracao: 'Alteração solicitada', encerrada: 'Encerrada', reprovada: 'Reprovada' };
 const KB_MAX_CARTOES = 100;
-const KB_VISIVEIS = 5;  // cartões visíveis por coluna; acima disso a coluna ganha barra de rolagem
+const KB_VISIVEIS = 3;  // cartões visíveis por coluna; acima disso a coluna ganha barra de rolagem
 // Ajusta a altura de cada coluna para exatamente KB_VISIVEIS cartões (altura real, pois os cartões variam por módulo)
 function kbAjustaAltura(raiz) {
   (raiz || document).querySelectorAll('.kb-cards').forEach(box => {
@@ -251,7 +252,7 @@ function kbCartao(x, modulo) {
   if (x.tipo === 'reembolso' && d.reembolsadoCliente === 'sim') flags.push('<span class="st st-encerrada">Reembolsado pelo cliente</span>');
   if (x.tipo === 'reembolso' && x.docFiscal) flags.push('<span class="st st-encerrada">Recibo anexado</span>');
   if (x.docFiscalPendente) flags.push(`<span class="st ${x.docFiscalVencido ? 'st-atrasada' : 'st-fiscal'}" title="${x.docFiscalVencido ? 'Documento fiscal em atraso' : 'Documento fiscal pendente'}">Doc. fiscal</span>`);
-  return `<div class="kb-card ${mine ? 'mine' : ''}" role="button" tabindex="0" data-kb-open="${x.id}" title="Abrir ${escapeHtml(x.numero)}">
+  return `<div class="kb-card ${mine ? 'mine' : ''} ${x.atrasada ? 'late' : ''}" role="button" tabindex="0" data-kb-open="${x.id}" title="Abrir ${escapeHtml(x.numero)}">
     <div class="kb-top"><span class="kb-mod">${ICONS[KB_ICO_TIPO[x.tipo]] || ''}${escapeHtml(x.tipoLabel)}</span><span class="kb-num">${escapeHtml(x.numero)}</span></div>
     <div class="kb-title">${escapeHtml(c.titulo)}</div>
     ${c.sub ? `<div class="kb-subt">${escapeHtml(c.sub)}</div>` : ''}
@@ -689,11 +690,13 @@ async function openSolicitacao(id) {
   if (aguardaMinhaAcao(s)) {
     if (s.status === 'rh2') acoes.push(`<button class="btn btn-warn" id="actAjustar">${ICONS.edit}AJUSTAR VALOR / TÉRMINO</button>`, `<button class="btn btn-approve" id="actEncerrarRh">${ICONS.checkCircle}ENCERRAR CONTRATO</button>`);
     else if (s.status === 'financeiro') acoes.push(`<button class="btn btn-danger" id="actReprovar">${ICONS.xCircle}REPROVAR</button>`, `<button class="btn btn-approve" id="actEncerrar">${ICONS.checkCircle}ENCERRAR (aprovar pagamento)</button>`);
-    else acoes.push(`<button class="btn btn-danger" id="actReprovar">${ICONS.xCircle}REPROVAR</button>`, `<button class="btn btn-warn" id="actAlterar">${ICONS.edit}ALTERAR</button>`, `<button class="btn btn-approve" id="actAprovar">${ICONS.check}APROVAR</button>`);
+    else acoes.push(`<button class="btn btn-danger" id="actReprovar">${ICONS.xCircle}REPROVAR</button>`, ...(s.tipo === 'freelancer' ? [] : [`<button class="btn btn-warn" id="actAlterar">${ICONS.edit}ALTERAR</button>`]), `<button class="btn btn-approve" id="actAprovar">${ICONS.check}APROVAR</button>`);
   }
+  // Freelancer: o Financeiro (etapa Financeiro ou após o encerramento) avisa o solicitante para incluir a NF
+  if (s.tipo === 'freelancer' && !s.docFiscal && ['admin', 'financeiro'].includes(me.perfil) && ['financeiro', 'encerrada'].includes(s.status)) acoes.unshift(`<button class="btn btn-warn" id="actNotificar">${ICONS.mail}NOTIFICAR</button>`);
 
-  const histIco = { liberacao_solicitante: 'key', doc_fiscal_removido: 'trash', criada: 'send', reenviada: 'send', aprovada: 'check', alteracao_solicitada: 'edit', editada: 'repeat', reprovada: 'xCircle', encerrada: 'flag', doc_fiscal_anexado: 'fileText', ajustada: 'edit' };
-  const histLabel = { liberacao_solicitante: 'Solicitante liberado do bloqueio de documento fiscal', criada: 'Solicitação enviada', reenviada: 'Solicitação reenviada para aprovação', aprovada: 'Aprovada', alteracao_solicitada: 'Alteração solicitada', editada: 'Solicitação alterada pelo solicitante', reprovada: 'Reprovada', encerrada: 'Encerrada — pagamento autorizado', ajustada: 'Valor/término ajustado pelo RH 2', doc_fiscal_anexado: 'Documento fiscal anexado', doc_fiscal_removido: 'Documento fiscal removido pelo Financeiro' };
+  const histIco = { liberacao_solicitante: 'key', doc_fiscal_removido: 'trash', criada: 'send', reenviada: 'send', aprovada: 'check', alteracao_solicitada: 'edit', editada: 'repeat', reprovada: 'xCircle', encerrada: 'flag', doc_fiscal_anexado: 'fileText', ajustada: 'edit', nf_notificada: 'mail' };
+  const histLabel = { liberacao_solicitante: 'Solicitante liberado do bloqueio de documento fiscal', criada: 'Solicitação enviada', reenviada: 'Solicitação reenviada para aprovação', aprovada: 'Aprovada', alteracao_solicitada: 'Alteração solicitada', editada: 'Solicitação alterada pelo solicitante', reprovada: 'Reprovada', encerrada: 'Encerrada — pagamento autorizado', ajustada: 'Valor/término ajustado pelo RH 2', doc_fiscal_anexado: 'Documento fiscal anexado', doc_fiscal_removido: 'Documento fiscal removido pelo Financeiro', nf_notificada: 'Solicitante notificado para incluir a Nota Fiscal' };
   const LABELS = { titulo: 'Título', solicitante: 'Solicitante', email: 'E-mail', fornecedor: 'Fornecedor', cliente: 'Cliente', numeroOcPi: 'Nº do Pedido', referencias: 'Nº do Pedido', nomeColaborador: 'Nome do colaborador', descricao: 'Descrição', valor: 'Valor', dataPagamento: 'Data', erroInterno: 'Erro interno', nome: 'Nome', reembolsadoCliente: 'Reembolsado pelo cliente', categoriaDespesa: 'Categoria da despesa', empresa: 'Empresa', categoria: 'Categoria', banco: 'Banco', agencia: 'Agência', conta: 'Conta', cpfCnpj: 'CPF/CNPJ', anexos: 'Anexos' };
   const fmtV = (k, v) => k === 'valor' ? fmtBRL(v) : k === 'dataPagamento' ? fmtDate(v) : Array.isArray(v) ? v.join(', ') : (v === undefined || v === null || v === '' ? '—' : String(v));
   const histHtml = h.slice().reverse().map(x => `<div class="hist-item">${icon(histIco[x.acao] || 'info')}<div>
@@ -727,7 +730,7 @@ async function openSolicitacao(id) {
 
   const refresh = async () => { if (ehPaginaSolicitacoes(currentPage)) await renderSolAtual(); };
   const doAcao = async (acao, just, extra) => {
-    try { await api('POST', `/solicitacoes/${s.id}/acao`, { acao, justificativa: just || '', ...(extra || {}) }); closeModal(); toast({ aprovar: 'Solicitação aprovada.', alterar: 'Solicitação devolvida ao solicitante.', ajustar: 'Valor/término ajustado e registrado no histórico.', reprovar: 'Solicitação reprovada.', encerrar: 'Solicitação encerrada — pagamento autorizado e lançado no orçamento.' }[acao], 'success'); await refresh(); }
+    try { await api('POST', `/solicitacoes/${s.id}/acao`, { acao, justificativa: just || '', ...(extra || {}) }); closeModal(); toast({ aprovar: 'Solicitação aprovada.', alterar: 'Solicitação devolvida ao solicitante.', ajustar: 'Valor/término ajustado e registrado no histórico.', reprovar: 'Solicitação reprovada.', encerrar: 'Solicitação encerrada — pagamento autorizado e lançado no orçamento.', notificar: 'Solicitante notificado (no sistema e por e-mail) para incluir a Nota Fiscal.' }[acao], 'success'); await refresh(); }
     catch (e) { toast(e.message, 'error'); }
   };
   const b = (id) => document.getElementById(id);
@@ -735,6 +738,7 @@ async function openSolicitacao(id) {
   if (b('actEncerrar')) b('actEncerrar').addEventListener('click', async () => { if (await confirmDialog({ title: 'Encerrar solicitação', message: `Autorizar o pagamento de ${fmtBRL(s.valor)}? O recibo será gerado, enviado ao solicitante e o valor lançado no orçamento de ${depNome(s.departamentoId)}.`, okLabel: 'Encerrar e autorizar', danger: false })) doAcao('encerrar'); });
   if (b('actEncerrarRh')) b('actEncerrarRh').addEventListener('click', async () => { if (await confirmDialog({ title: 'Encerrar contrato', message: `Encerrar o contrato recorrente de ${d.nomeFreelancer || ''}? O valor de ${fmtBRL(s.valor)} será lançado como gasto realizado no orçamento de ${depNome(s.departamentoId)} (sem passar pelo Financeiro).`, okLabel: 'Encerrar contrato', danger: false })) doAcao('encerrar'); });
   if (b('actAjustar')) b('actAjustar').addEventListener('click', async () => { const aj = await ajusteDialog(s); if (aj) doAcao('ajustar', aj.justificativa, { valor: aj.valor, dataFim: aj.dataFim, anexos: aj.anexos }); });
+  if (b('actNotificar')) b('actNotificar').addEventListener('click', async () => { if (await confirmDialog({ title: 'Notificar solicitante', message: `Avisar ${s.solicitanteNome} (no sistema e por e-mail) para incluir a Nota Fiscal de ${s.numero}?`, okLabel: 'Notificar', danger: false })) doAcao('notificar'); });
   if (b('actAlterar')) b('actAlterar').addEventListener('click', async () => { const j = await justificativaDialog({ title: 'Solicitar alteração', message: 'A solicitação voltará ao solicitante para ajustes. Explique o que precisa ser alterado.', okLabel: 'Devolver para alteração' }); if (j) doAcao('alterar', j); });
   if (b('actReprovar')) b('actReprovar').addEventListener('click', async () => { const j = await justificativaDialog({ title: 'Reprovar solicitação', message: 'A reprovação encerra o processo definitivamente. Informe o motivo.', okLabel: 'Reprovar', danger: true }); if (j) doAcao('reprovar', j); });
   if (b('actEditar')) b('actEditar').addEventListener('click', () => { closeModal(); setTimeout(() => openSolicitacaoForm(s.tipo, s), 200); });

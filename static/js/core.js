@@ -105,6 +105,7 @@ const ICONS = {
   wallet: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>',
   building: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v18"/><path d="M2 22h20M9 6h1m4 0h1m-6 4h1m4 0h1m-6 4h1m4 0h1"/></svg>',
   scale: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M5 8l-3 6a4 4 0 0 0 8 0zM19 8l-3 6a4 4 0 0 0 8 0zM3 8h18M12 3l-4 5h8z"/></svg>',
+  panelLeft: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>',
   chevDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
   download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
   refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>',
@@ -152,7 +153,7 @@ function modalIcon(name) { return `<span class="modal-head-icon">${ICONS[name] |
 /* ---------- estado global (carregado do servidor) ---------- */
 const DB = {
   user: null, departamentos: [], empresas: [], grupoNome: '', anosFechados: [], properties: {}, budgets: [], launches: [], users: [], perfis: {}, tiposSolicitacao: {}, statusLabel: {},
-  config: {}, trava: { bloqueado: false, vencidas: [], pendentes: [] }, travaFreelancer: { bloqueado: false, vencidas: [], pendentes: [] }, solicitacoes: [],
+  config: {}, trava: { bloqueado: false, vencidas: [], pendentes: [] }, travaFreelancer: { bloqueado: false, vencidas: [], pendentes: [] }, avisoNfFreelancer: [], solicitacoes: [],
 };
 function depNome(id) { const d = DB.departamentos.find(x => x.id === id); return d ? d.nome : (id || '—'); }
 function userNome(id) { const u = DB.users.find(x => x.id === id); return u ? u.nome : '—'; }
@@ -192,7 +193,9 @@ async function reloadLaunches() { DB.launches = (await api('GET', '/launches')).
 async function reloadBudgets() { DB.budgets = (await api('GET', '/budgets')).budgets; }
 async function reloadProperties() { DB.properties = (await api('GET', '/properties')).properties; }
 async function reloadDepartamentos() { DB.departamentos = (await api('GET', '/departamentos')).departamentos; }
-async function reloadSolicitacoes() { const d = await api('GET', '/solicitacoes'); DB.solicitacoes = d.solicitacoes; DB.trava = d.trava; DB.travaFreelancer = d.travaFreelancer || DB.travaFreelancer; if (typeof atualizarIndicadoresMenu === 'function') atualizarIndicadoresMenu(); }
+// Cabeçalho da página: o que antes era um segundo título/descrição dentro da página sobe para o canto direito da barra superior
+function topoAcoes(pageId, html) { const t = document.getElementById('topbarRight'); if (t && currentPage === pageId) t.innerHTML = html || ''; }
+async function reloadSolicitacoes() { const d = await api('GET', '/solicitacoes'); DB.solicitacoes = d.solicitacoes; DB.trava = d.trava; DB.travaFreelancer = d.travaFreelancer || DB.travaFreelancer; DB.avisoNfFreelancer = d.avisoNfFreelancer || []; if (typeof atualizarIndicadoresMenu === 'function') atualizarIndicadoresMenu(); }
 
 /* ---------- upload (corpo binário em streaming; máx., cotas e verificação no servidor) ---------- */
 const EXT_OK = ['.pdf', '.docx', '.xlsx', '.png', '.jpg', '.jpeg'];

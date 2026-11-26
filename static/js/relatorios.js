@@ -24,8 +24,8 @@ function paintRelatorios() {
 
 /* ---------- catálogo ---------- */
 function paintCatalogoRelatorios(el) {
+  topoAcoes('relatorios', '<div class="hint">Escolha um relatório, ajuste os filtros e exporte em Excel ou PDF</div>');
   el.innerHTML = `
-    <div class="section-title-row" style="margin-top:0;"><h2>Relatórios</h2><div class="hint">Escolha um relatório, ajuste os filtros e exporte em Excel ou PDF</div></div>
     <div class="grid grid-3 anim-in">${relState.cat.map(r => `
       <div class="card hoverable" data-rel="${escapeHtml(r.id)}" style="padding:16px 18px; cursor:pointer;">
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;"><span class="kpi-ico" style="background:color-mix(in srgb, ${cssVar('--c1')} 18%, transparent); color:${cssVar('--c1')};">${ICONS[REL_ICONES[r.id]] || ICONS.list}</span><strong style="font-size:14px;">${escapeHtml(r.titulo)}</strong></div>
@@ -87,6 +87,7 @@ function relQuery(extra) { return `f=${encodeURIComponent(JSON.stringify(lerFilt
 function paintConstrutorRelatorio(el) {
   const r = relAtual();
   const salvos = relState.salvos.filter(s => s.relatorio === r.id);
+  topoAcoes('relatorios', '');
   el.innerHTML = `
     <div class="section-title-row" style="margin-top:0;"><h2><a href="#" id="relVoltar" style="color:inherit;" title="Voltar aos relatórios">←</a> ${escapeHtml(r.titulo)}</h2><div class="hint">${escapeHtml(r.descricao)}</div></div>
     <div class="card anim-in" style="padding:16px 18px; margin-bottom:14px;" id="relFiltros">

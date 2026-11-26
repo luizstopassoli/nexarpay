@@ -43,6 +43,23 @@ function wireNavMobile() {
   document.addEventListener('keydown', e => { if (e.key === 'Escape') setNavAberto(false); });
   window.matchMedia('(min-width: 768px)').addEventListener('change', e => { if (e.matches) setNavAberto(false); });
 }
+// Menu lateral recolhível (telas >= 768px): só ícones e pontos de pendência; o conteúdo ocupa o espaço liberado. A escolha fica salva no navegador.
+function setNavRecolhido(on, salvar) {
+  const sh = document.getElementById('appShell'), b = document.getElementById('navCollapseBtn');
+  if (!sh) return;
+  sh.classList.toggle('nav-collapsed', !!on);
+  if (b) { b.setAttribute('aria-pressed', on ? 'true' : 'false'); b.setAttribute('aria-label', on ? 'Expandir menu' : 'Recolher menu'); b.title = on ? 'Expandir menu' : 'Recolher menu'; }
+  if (salvar) { try { localStorage.setItem('nexarpay.menuRecolhido', on ? '1' : '0'); } catch (e) { /* sem armazenamento: vale só nesta sessão */ } }
+  setTimeout(() => window.dispatchEvent(new Event('resize')), 230);  // gráficos e Kanban se reajustam à nova largura
+}
+function wireNavRecolher() {
+  const b = document.getElementById('navCollapseBtn');
+  if (!b) return;
+  b.innerHTML = ICONS.panelLeft;
+  b.addEventListener('click', () => setNavRecolhido(!document.getElementById('appShell').classList.contains('nav-collapsed'), true));
+  let on = false; try { on = localStorage.getItem('nexarpay.menuRecolhido') === '1'; } catch (e) { }
+  setNavRecolhido(on, false);
+}
 function navigateTo(pageId) {
   setNavAberto(false);
   const allowed = pagesForCurrentUser();
@@ -146,6 +163,7 @@ async function boot() {
     document.getElementById('icoSun').innerHTML = ICONS.sun;
     document.getElementById('icoLogout').innerHTML = ICONS.logout;
     wireNavMobile();
+    wireNavRecolher();
     document.getElementById('themeBtnDark').addEventListener('click', () => setTheme('dark'));
     document.getElementById('themeBtnLight').addEventListener('click', () => setTheme('light'));
     wireAuthUI();

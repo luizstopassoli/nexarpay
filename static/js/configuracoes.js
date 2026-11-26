@@ -13,11 +13,10 @@ async function renderConfiguracoes() {
   if (currentPage !== 'configuracoes') return;
   const users = cfgState.users.slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
   const dom = DB.config.dominio;
+  topoAcoes('configuracoes', `<button class="btn btn-primary btn-sm" id="addUserBtn">${ICONS.userPlus}Novo Usuário</button>`);
   el.innerHTML = `
-    <div class="section-title-row" style="margin-top:0;"><h2>Configurações</h2><div class="hint">Usuários e perfis de acesso, aprovadores, backup e e-mail</div></div>
-
     <div class="settings-block anim-in">
-      <div class="section-title-row" style="margin-top:0;"><h2 style="font-size:14px;">Usuários do Sistema</h2><button class="btn btn-primary btn-sm" id="addUserBtn">${ICONS.userPlus}Novo Usuário</button></div>
+      <div class="section-title-row" style="margin-top:0;"><h2 style="font-size:14px;">Usuários do Sistema</h2></div>
       <div class="card table-card"><div class="table-scroll"><table class="data-table">
         <thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Departamentos</th><th>Diretor(a) 1</th><th>Diretor(a) 2</th><th>Status</th><th style="text-align:right;">Ações</th></tr></thead>
         <tbody>${users.map(u => `<tr>

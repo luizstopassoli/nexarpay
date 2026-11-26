@@ -22,8 +22,8 @@ function renderPropriedades() {
   if (def.special) { renderDepartamentosTab(el, tabs); return; }
   const items = (DB.properties[def.key] || []).slice().sort((a, b) => a.localeCompare(b, 'pt-BR'));
   const filtered = propState.search ? items.filter(i => i.toLowerCase().includes(propState.search.toLowerCase())) : items;
+  topoAcoes('propriedades', `<div class="hint">${escapeHtml(def.hint || 'Listas usadas nos formulários de Lançamentos e Solicitações')}</div>`);
   el.innerHTML = `
-    <div class="section-title-row" style="margin-top:0;"><h2>Propriedades &amp; Cadastros</h2><div class="hint">${escapeHtml(def.hint || 'Listas usadas nos formulários de Lançamentos e Solicitações')}</div></div>
     ${tabs}
     <div class="card table-card anim-in">
       <div class="table-toolbar"><div class="search-box">${ICONS.search}<input id="propSearch" placeholder="Buscar ${def.label.toLowerCase()}..." value="${escapeHtml(propState.search)}"/></div><button class="btn btn-primary" id="addPropBtn">${ICONS.plus}Novo ${def.singular}</button></div>
@@ -70,8 +70,8 @@ function deleteProp(def, value) {
 function renderDepartamentosTab(el, tabs) {
   const deps = DB.departamentos.slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
   const usersByDep = (id) => DB.users.filter(u => u.ativo && (DB.usersFull ? (DB.usersFull.find(x => x.id === u.id)?.departamentos || []) : []).includes(id)).length;
+  topoAcoes('propriedades', '<div class="hint">Cada departamento tem orçamento próprio; usuários podem pertencer a mais de um</div>');
   el.innerHTML = `
-    <div class="section-title-row" style="margin-top:0;"><h2>Propriedades &amp; Cadastros</h2><div class="hint">Cada departamento tem orçamento próprio; usuários podem pertencer a mais de um</div></div>
     ${tabs}
     <div class="card table-card anim-in">
       <div class="table-toolbar"><div class="hint">${deps.length} departamento(s)</div><button class="btn btn-primary" id="addDepBtn">${ICONS.plus}Novo Departamento</button></div>
@@ -108,7 +108,8 @@ function openDepForm(id) {
 
 /* ---- empresas (cadastro único: formulários, rateio e dashboards leem daqui) ---- */
 async function renderEmpresasTab(el, tabs) {
-  el.innerHTML = `<div class="section-title-row" style="margin-top:0;"><h2>Propriedades &amp; Cadastros</h2></div>${tabs}<div class="card empty-state">${ICONS.clock}<h4>Carregando…</h4></div>`;
+  topoAcoes('propriedades', '');
+  el.innerHTML = `${tabs}<div class="card empty-state">${ICONS.clock}<h4>Carregando…</h4></div>`;
   wireTabs(el);
   let pend = null;
   try { const r = await reloadEmpresas(); pend = r.pendencias || null; } catch (e) { toast(e.message, 'error'); }
@@ -118,8 +119,8 @@ async function renderEmpresasTab(el, tabs) {
   const nPart = emps.filter(e => e.ativa && e.participaRateio).length;
   const uso = (id) => DB.launches.filter(l => l.empresaId === id).length;
   const pendHtml = pend && (pend.solicitacoes.length || pend.lancamentos) ? `<div class="alert-box warn">${ICONS.alert}<div><strong>Registros sem empresa (a empresa agora é obrigatória)</strong><br/>${pend.solicitacoes.length ? 'Solicitações: ' + pend.solicitacoes.map(x => escapeHtml(x.numero) + ' (' + escapeHtml(x.status) + ')').join(', ') + '. Quem aprova deve usar <em>Alterar</em> para devolvê-las ao solicitante informar a empresa.' : ''}${pend.lancamentos ? `<br/>${pend.lancamentos} lançamento(s) sem empresa: edite-os em Lançamentos.` : ''}</div></div>` : '';
+  topoAcoes('propriedades', '<div class="hint">Empresas do cliente: usadas nas solicitações, nos lançamentos, no rateio do orçamento e nos dashboards</div>');
   el.innerHTML = `
-    <div class="section-title-row" style="margin-top:0;"><h2>Propriedades &amp; Cadastros</h2><div class="hint">Empresas do cliente: usadas nas solicitações, nos lançamentos, no rateio do orçamento e nos dashboards</div></div>
     ${tabs}${pendHtml}
     <div class="card anim-in" style="padding:16px 18px; margin-bottom:14px;">
       <div class="form-grid"><div class="form-field"><label>Nome do grupo</label><input class="input" id="grupoNomeInput" value="${escapeHtml(DB.grupoNome || '')}" placeholder="Ex.: Grupo Gpac"/></div>

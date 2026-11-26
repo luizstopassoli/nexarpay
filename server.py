@@ -2643,6 +2643,18 @@ def bloqueio_freelancer(conn, user_id):
     return {'bloqueado': bloq, 'vencidas': venc if bloq else [], 'pendentes': pend, 'mensagem': MSG_BLOQUEIO_FREELA if bloq else None}
 
 
+def avisos_nf_freelancer(conn, user_id):
+    """Freelancer: solicitações do usuário em que o Financeiro pediu a Nota Fiscal e ela ainda não foi anexada (aviso vermelho no sistema)."""
+    out = []
+    for r in conn.execute("""SELECT s.id,s.numero,s.dados FROM solicitacoes s
+        WHERE s.solicitante_id=? AND s.tipo='freelancer' AND s.status IN ('financeiro','encerrada') AND (s.doc_fiscal IS NULL OR s.doc_fiscal='')
+          AND EXISTS (SELECT 1 FROM historico h WHERE h.solicitacao_id=s.id AND h.acao='nf_notificada'
+                      AND h.id > COALESCE((SELECT MAX(x.id) FROM historico x WHERE x.solicitacao_id=s.id AND x.acao IN ('doc_fiscal_anexado','doc_fiscal_removido')), 0))""", (user_id,)):
+        d = pj(r['dados'], {})
+        out.append({'id': r['id'], 'numero': r['numero'], 'nome': d.get('nomeFreelancer'), 'dataFim': d.get('dataFim'), 'atraso': _dias_de_atraso(d.get('dataFim'))})
+    return out
+
+
 def pendencias_doc_fiscal(conn, user_id):
     """Documentos fiscais pendentes do solicitante. O bloqueio de novos pedidos depende do parâmetro de cada módulo
     (dias de atraso; 0 = nunca bloqueia). Reembolso mantém o bloqueio a partir de 1 dia de atraso."""
@@ -3402,7 +3414,7 @@ class Handler(BaseHTTPRequestHandler):
             'users': users_light, 'perfis': PERFIS, 'tiposSolicitacao': TIPOS_SOLICITACAO, 'statusLabel': STATUS_LABEL,
             'config': {'demo': DEMO_MODE, 'dominio': CONFIG.get('dominio_permitido'), 'prazosDocFiscal': PRAZO_DOC_FISCAL, 'maxUploadMB': MAX_UPLOAD_MB, 'docFiscal': doc_fiscal_cfg(conn),
                        'emailModo': (CONFIG.get('email') or {}).get('modo'), 'reenvioParaAprovacao1': bool(CONFIG.get('reenvio_retorna_para_aprovacao1', True))},
-            'trava': pendencias_doc_fiscal(conn, user['id']), 'travaFreelancer': bloqueio_freelancer(conn, user['id']),
+            'trava': pendencias_doc_fiscal(conn, user['id']), 'travaFreelancer': bloqueio_freelancer(conn, user['id']), 'avisoNfFreelancer': avisos_nf_freelancer(conn, user['id']),
         })
 
     # ---- usuários
@@ -3843,7 +3855,8 @@ class Handler(BaseHTTPRequestHandler):
             conn.commit()
             nomes = mapa_empresas(conn)
             return self.send_json({'solicitacoes': [sol_out(conn, r, user=user, nomes=nomes) for r in rows], 'trava': pendencias_doc_fiscal(conn, user['id']),
-                                   'travaFreelancer': bloqueio_freelancer(conn, user['id'])})
+                                   'travaFreelancer': bloqueio_freelancer(conn, user['id']),
+                                   'avisoNfFreelancer': avisos_nf_freelancer(conn, user['id'])})
         if method == 'GET' and len(parts) == 2 and parts[1] == 'trava':
             return self.send_json(dict(pendencias_doc_fiscal(conn, user['id']), freelancer=bloqueio_freelancer(conn, user['id'])))
         if method == 'POST' and len(parts) == 1:
@@ -4009,6 +4022,10 @@ class Handler(BaseHTTPRequestHandler):
         acao = body.get('acao')
         just = (body.get('justificativa') or '').strip()
         status = r['status']
+        if acao == 'notificar':
+            return self.sol_notificar_nf(conn, user, r)
+        if acao == 'alterar' and r['tipo'] == 'freelancer':
+            raise ApiError(400, 'No módulo Freelancer não há devolução para alteração: use Aprovar ou Reprovar.')
         if acao in ('alterar', 'reprovar') and len(just) < 5:
             raise ApiError(400, 'Justifique o motivo (mínimo de 5 caracteres).')
 
@@ -4162,6 +4179,30 @@ class Handler(BaseHTTPRequestHandler):
         else:
             raise ApiError(400, 'Ação inválida para esta etapa.')
         self.audit(conn, user, 'solicitacao.' + str(acao), r['numero'], {'etapa': etapa, 'de': status, 'valor': r['valor'], 'justificativa': just or None})
+        return self.send_json({'solicitacao': sol_out(conn, conn.execute('SELECT * FROM solicitacoes WHERE id=?', (r['id'],)).fetchone(), True)})
+
+    def sol_notificar_nf(self, conn, user, r):
+        """Freelancer: o Financeiro (etapa Financeiro ou já encerrada) avisa o solicitante para incluir a Nota Fiscal — aviso no sistema + e-mail."""
+        if r['tipo'] != 'freelancer':
+            raise ApiError(400, 'A notificação de Nota Fiscal existe somente no módulo Freelancer.')
+        if user['perfil'] not in ('admin', 'financeiro'):
+            raise ApiError(403, 'Somente o Financeiro pode notificar o solicitante sobre a Nota Fiscal.')
+        if r['status'] not in ('financeiro', 'encerrada'):
+            raise ApiError(400, 'A notificação vale na etapa do Financeiro ou após o encerramento da solicitação.')
+        if r['doc_fiscal']:
+            raise ApiError(400, 'A Nota Fiscal já foi anexada a esta solicitação.')
+        dd = pj(r['dados'], {})
+        solic = conn.execute('SELECT * FROM users WHERE id=?', (r['solicitante_id'],)).fetchone()
+        para = r['email'] or (solic['email'] if solic else None)
+        add_hist(conn, r['id'], user, 'nf_notificada', 3, None, {'para': para})
+        conn.commit()
+        self.audit(conn, user, 'solicitacao.nf_notificada', r['numero'], {'status': r['status']})
+        if para:
+            enviar_email(para, 'NexarPay — Atenção! Nota Fiscal pendente — %s' % r['numero'],
+                         ('Atenção!\n\nFreelancer: Nota Fiscal pendente em %s (%s). O Financeiro solicitou a inclusão da Nota Fiscal do serviço. '
+                          'Anexe a NF o quanto antes no sistema (prazo: fim da contratação, %s). %s\n\n%s\n\nAcesse: %s\n\nAtenciosamente\nNexarPay')
+                         % (r['numero'], dd.get('nomeFreelancer') or '', fmt_data(dd.get('dataFim') or r['prazo_doc_fiscal']), aviso_consequencia_nf(conn, 'freelancer'),
+                            self.resumo_email(conn, r), CONFIG.get('url_base')))
         return self.send_json({'solicitacao': sol_out(conn, conn.execute('SELECT * FROM solicitacoes WHERE id=?', (r['id'],)).fetchone(), True)})
 
     def sol_ajustar(self, conn, user, r, body, just):

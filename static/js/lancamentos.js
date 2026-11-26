@@ -30,11 +30,8 @@ function renderLancamentos() {
   const pageItems = all.slice((lancState.page - 1) * lancState.pageSize, lancState.page * lancState.pageSize);
   const el = document.getElementById('page-lancamentos');
   const deps = depsVisiveis();
+  topoAcoes('lancamentos', `<div class="hint">${all.length} de ${DB.launches.length} lançamentos · ${fmtBRL(all.reduce((s, l) => s + (Number(l.custoTotal) || 0), 0))} filtrado</div>`);
   el.innerHTML = `
-    <div class="section-title-row" style="margin-top:0;">
-      <h2>Lançamentos de Gastos</h2>
-      <div class="hint">${all.length} de ${DB.launches.length} lançamentos · ${fmtBRL(all.reduce((s, l) => s + (Number(l.custoTotal) || 0), 0))} filtrado</div>
-    </div>
     <div class="card table-card anim-in">
       <div class="table-toolbar">
         <div class="search-box">${ICONS.search}<input id="lancSearch" placeholder="Buscar em tudo: descrição, valor, fornecedor, nº, data…" value="${escapeHtml(lancState.search)}"/></div>
